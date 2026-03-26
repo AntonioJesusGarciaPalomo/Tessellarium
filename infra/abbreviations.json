@@ -8,5 +8,6 @@
   "containerRegistry": "cr",
   "logAnalyticsWorkspace": "log-",
   "staticWebApp": "swa-",
-  "managedIdentity": "id-"
+  "managedIdentity": "id-",
+  "storageAccount": "st"
 }

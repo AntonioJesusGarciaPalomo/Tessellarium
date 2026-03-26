@@ -24,13 +24,24 @@ resource database 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15
   }
 }
 
-resource container 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+resource sessionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
   parent: database
   name: 'sessions'
   properties: {
     resource: {
       id: 'sessions'
       partitionKey: { paths: ['/id'], kind: 'Hash' }
+    }
+  }
+}
+
+resource threadsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: database
+  name: 'threads'
+  properties: {
+    resource: {
+      id: 'threads'
+      partitionKey: { paths: ['/thread_id'], kind: 'Hash' }
     }
   }
 }

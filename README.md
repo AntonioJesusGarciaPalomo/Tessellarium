@@ -2,8 +2,6 @@
 
 ### Decisive Experiment Compiler
 
-*Unbiased experimental mosaics, by design.*
-
 ---
 
 ## The problem
@@ -13,6 +11,8 @@ A researcher: has competing hypotheses, partial data — protocols in PDF, resul
 Today, the answer comes from intuition, conversations with colleagues, or a language model that generates plausible text without formal guarantees. None of these sources compute which experiment is optimal, what combinatorial coverage it achieves, which hypotheses it can and cannot discriminate, or what the researcher loses if a constraint prevents it from being executed.
 
 Existing scientific assistants — Google AI co-scientist, Microsoft Discovery, Sapio ELaiN, Labguru — interpret protocols, summarize literature, and suggest next steps as free text. None of them formulates the next experiment as an optimization problem with verifiable properties.
+
+This affects experimental scientists and research leaders across chemistry, pharmaceuticals, agronomy, and materials science — anyone who faces critical decisions about what to test next with limited resources, competing explanations, and, increasingly, regulatory scrutiny demanding auditable justification for experimental choices.
 
 ---
 
@@ -31,8 +31,6 @@ Its output is not a conversational recommendation but a **concrete experimental 
 The system is grounded in Fisher's theory of experimental design, where experiments are not improvised but constructed with formal mathematical structure.
 
 The core engine is a **deterministic Python planner — not a language model** — that enumerates untested factor-level combinations, identifies which ones discriminate between specific hypothesis pairs, and selects the smallest subset that maximizes discrimination under constraints.
-
-The LLM's role is strictly limited to interpreting unstructured inputs (protocols, data, images) and explaining outputs in natural language. It never generates the experimental plan.
 
 ---
 
@@ -108,6 +106,8 @@ The system separates three types of reasoning following the same neurosymbolic p
 | **Static Web Apps** | Frontend hosting |
 | **Lean 4** *(optional)* | Formal verification of design properties |
 
+The result is an auditable experimental artifact with traceable justification at every step, from ingestion to compilation to verification.
+
 ---
 
 ## Quick start
@@ -123,7 +123,7 @@ The system separates three types of reasoning following the same neurosymbolic p
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-org>/tessellarium.git
+git clone https://github.com/Tessellarium/tessellarium.git
 cd tessellarium
 
 # Backend
@@ -186,8 +186,9 @@ tessellarium/
 │       ├── openai.bicep                # Azure OpenAI (GPT-4o + GPT-4o-mini)
 │       ├── content-safety.bicep        # Azure AI Content Safety
 │       ├── search.bicep                # Azure AI Search
-│       ├── cosmos.bicep                # Cosmos DB serverless
-│       ├── container-apps.bicep        # Container Apps + registry
+│       ├── cosmos.bicep                # Cosmos DB serverless (sessions + threads)
+│       ├── storage.bicep              # Azure Blob Storage (uploads, processed, literature)
+│       ├── container-apps.bicep        # Container Apps + Lean + registry
 │       └── static-web-app.bicep        # Static Web App
 │
 ├── backend/

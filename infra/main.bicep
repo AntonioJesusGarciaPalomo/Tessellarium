@@ -24,11 +24,15 @@ var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName, project: 'tessellarium' }
 
+// ─── Resource Group ─────────────────────────────────────────────────
+
 resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: '${abbrs.resourceGroup}tessellarium-${environmentName}'
   location: location
   tags: tags
 }
+
+// ─── Azure OpenAI ───────────────────────────────────────────────────
 
 module openai './modules/openai.bicep' = {
   name: 'openai'
@@ -42,6 +46,8 @@ module openai './modules/openai.bicep' = {
   }
 }
 
+// ─── Azure AI Content Safety ────────────────────────────────────────
+
 module contentSafety './modules/content-safety.bicep' = {
   name: 'content-safety'
   scope: rg
@@ -51,6 +57,8 @@ module contentSafety './modules/content-safety.bicep' = {
     tags: tags
   }
 }
+
+// ─── Azure AI Search ────────────────────────────────────────────────
 
 module search './modules/search.bicep' = {
   name: 'search'
@@ -62,6 +70,8 @@ module search './modules/search.bicep' = {
   }
 }
 
+// ─── Cosmos DB ──────────────────────────────────────────────────────
+
 module cosmos './modules/cosmos.bicep' = {
   name: 'cosmos'
   scope: rg
@@ -71,6 +81,20 @@ module cosmos './modules/cosmos.bicep' = {
     tags: tags
   }
 }
+
+// ─── Azure Blob Storage ─────────────────────────────────────────────
+
+module storage './modules/storage.bicep' = {
+  name: 'storage'
+  scope: rg
+  params: {
+    name: 'st${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+// ─── Container Apps Environment + Backend + Lean ────────────────────
 
 module containerApps './modules/container-apps.bicep' = {
   name: 'container-apps'
@@ -88,8 +112,11 @@ module containerApps './modules/container-apps.bicep' = {
     searchApiKey: search.outputs.apiKey
     cosmosEndpoint: cosmos.outputs.endpoint
     cosmosKey: cosmos.outputs.key
+    storageConnectionString: storage.outputs.connectionString
   }
 }
+
+// ─── Static Web App (Frontend) ──────────────────────────────────────
 
 module staticWebApp './modules/static-web-app.bicep' = {
   name: 'static-web-app'
@@ -101,10 +128,13 @@ module staticWebApp './modules/static-web-app.bicep' = {
   }
 }
 
+// ─── Outputs ────────────────────────────────────────────────────────
+
 output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_OPENAI_ENDPOINT string = openai.outputs.endpoint
 output AZURE_CONTENT_SAFETY_ENDPOINT string = contentSafety.outputs.endpoint
 output AZURE_SEARCH_ENDPOINT string = search.outputs.endpoint
 output AZURE_COSMOS_ENDPOINT string = cosmos.outputs.endpoint
+output AZURE_STORAGE_ENDPOINT string = storage.outputs.endpoint
 output BACKEND_URL string = containerApps.outputs.backendUrl
 output FRONTEND_URL string = staticWebApp.outputs.url
