@@ -8,7 +8,7 @@
 
 ## The problem
 
-A researcher has competing hypotheses, partial data — protocols in PDF, results in CSV, images from assays — real-world constraints such as limited budgets, depleted materials, and safety-sensitive domains, and one urgent question: **what experiment should I run next?**
+A researcher: has competing hypotheses, partial data — protocols in PDF, results in CSV, images from assays — real-world constraints such as limited budgets, depleted materials, and safety-sensitive domains, and one urgent question: **what experiment should I run next?**
 
 Today, the answer comes from intuition, conversations with colleagues, or a language model that generates plausible text without formal guarantees. None of these sources compute which experiment is optimal, what combinatorial coverage it achieves, which hypotheses it can and cannot discriminate, or what the researcher loses if a constraint prevents it from being executed.
 
