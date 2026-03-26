@@ -1,4 +1,4 @@
-# Tessellarium
+![Tessellarium Banner](docs/images/brand/tessellarium-banner.png)
 
 ### Decisive Experiment Compiler
 
@@ -166,7 +166,10 @@ This provisions all Azure resources via Bicep (OpenAI, Content Safety, AI Search
 ```
 tessellarium/
 │
+├── .gitignore
 ├── azure.yaml                          # azd manifest
+├── LICENSE                             # MIT
+├── README.md
 │
 ├── .devcontainer/
 │   └── devcontainer.json               # Dev container (Python 3.12, Node 20, az/azd CLI)
@@ -193,17 +196,24 @@ tessellarium/
 │   ├── .env.template                   # Environment template
 │   ├── main.py                         # FastAPI orchestrator
 │   ├── config/
+│   │   ├── __init__.py
 │   │   └── settings.py                 # Azure configuration
 │   ├── app/
+│   │   ├── __init__.py
 │   │   ├── models/
+│   │   │   ├── __init__.py
 │   │   │   └── problem_space.py        # Central data schema
 │   │   ├── doe_planner/
+│   │   │   ├── __init__.py
 │   │   │   └── planner.py              # Deterministic compiler
 │   │   ├── safety/
+│   │   │   ├── __init__.py
 │   │   │   └── governor.py             # Deterministic policy engine
 │   │   ├── agents/
+│   │   │   ├── __init__.py
 │   │   │   └── parser_agent.py         # GPT-4o structured extraction
 │   │   └── services/
+│   │       ├── __init__.py
 │   │       ├── content_understanding.py
 │   │       ├── cosmos_store.py
 │   │       └── search_service.py
@@ -213,6 +223,7 @@ tessellarium/
 ├── frontend/
 │   ├── package.json
 │   ├── public/
+│   │   └── index.html
 │   └── src/
 │       ├── components/
 │       ├── pages/
@@ -220,9 +231,21 @@ tessellarium/
 │
 ├── lean/                               # Formal verification (stretch goal)
 │   └── Tessellarium/
+│       ├── lakefile.lean
+│       ├── lean-toolchain
+│       └── Tessellarium/
+│           ├── Basic.lean
+│           └── CoveringArray.lean
 │
 ├── docs/
+│   ├── images/
+│   │   ├── brand/
+│   │   │   └── tessellarium-banner.png # Project banner
+│   │   ├── architecture/
+│   │   ├── ui/
+│   │   └── demos/
 │   ├── architecture/
+│   │   └── data-flow.md
 │   └── roadmap/
 │       ├── semantic-citation-layer.md
 │       └── neurosymbolic-discovery.md
