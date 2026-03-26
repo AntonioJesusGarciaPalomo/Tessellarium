@@ -1,1 +1,20 @@
-# Content will be added separately
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: tessellarium
+metadata:
+  template: tessellarium@0.1.0
+
+services:
+  backend:
+    project: ./backend
+    language: python
+    host: containerapp
+    docker:
+      path: ./backend/Dockerfile
+      context: ./backend
+
+  frontend:
+    project: ./frontend
+    language: js
+    host: staticwebapp
+    dist: build

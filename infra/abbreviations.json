@@ -1,1 +1,12 @@
-// Content will be added separately
+{
+  "resourceGroup": "rg-",
+  "cognitiveServicesAccount": "cog-",
+  "searchService": "srch-",
+  "cosmosDBAccount": "cosmos-",
+  "containerAppsEnvironment": "cae-",
+  "containerApp": "ca-",
+  "containerRegistry": "cr",
+  "logAnalyticsWorkspace": "log-",
+  "staticWebApp": "swa-",
+  "managedIdentity": "id-"
+}

@@ -1,28 +1,48 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
+.eggs/
 *.egg
-
-# Environment
-.env
 .venv/
 venv/
 env/
 
+# Node / Frontend
+node_modules/
+frontend/build/
+frontend/dist/
+.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Test / Coverage
+# Azure
+.azure/
+
+# Lean
+lean/Tessellarium/.lake/
+lean/Tessellarium/build/
+
+# Docker
+*.log
+
+# Testing
 .pytest_cache/
 htmlcov/
 .coverage
