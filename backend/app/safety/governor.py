@@ -9,12 +9,18 @@ Safety is a CONSTRAINT on the input to the compiler.
 Dangerous regions are excluded from the search space BEFORE compilation.
 """
 
+import logging
 import re
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from app.models.problem_space import (
     ProblemSpace, Constraint, SafetyVerdict, Factor, Hypothesis,
 )
+
+if TYPE_CHECKING:
+    from app.services.content_safety_service import ContentSafetyService
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Domain-specific safety patterns ────────────────────────────────────────
@@ -53,43 +59,106 @@ class SafetyGovernor:
     - BLOCK: return evidence summary only + require human review
     """
 
-    def __init__(self, problem_space: ProblemSpace):
+    def __init__(
+        self,
+        problem_space: ProblemSpace,
+        content_safety_service: Optional["ContentSafetyService"] = None,
+    ):
         self.ps = problem_space
+        self._content_safety = content_safety_service
         self.notes: list[str] = []
 
-    def evaluate(self, user_query: Optional[str] = None) -> SafetyVerdict:
+    @staticmethod
+    def _max_verdict(a: SafetyVerdict, b: SafetyVerdict) -> SafetyVerdict:
+        """Return the more severe of two verdicts."""
+        order = [SafetyVerdict.ALLOW, SafetyVerdict.DEGRADE, SafetyVerdict.BLOCK]
+        return a if order.index(a) >= order.index(b) else b
+
+    async def evaluate_async(self, user_query: Optional[str] = None) -> SafetyVerdict:
         """
-        Run all safety checks. Returns verdict and modifies ProblemSpace
-        by adding safety constraints when degrading.
+        Run all safety checks including the Content Safety API.
+        Async version — use this when Content Safety service is available.
         """
         self.notes = []
         verdict = SafetyVerdict.ALLOW
 
-        # Check 1: Scan factors for safety-sensitive domains
-        factor_verdict = self._check_factors()
-        if factor_verdict.value > verdict.value:
-            verdict = factor_verdict
+        # Check 0: Azure Content Safety API (if configured)
+        if self._content_safety:
+            api_verdict = await self._check_content_safety_api(user_query)
+            verdict = self._max_verdict(verdict, api_verdict)
 
-        # Check 2: Scan hypotheses for clinical/bio content
-        hypothesis_verdict = self._check_hypotheses()
-        if hypothesis_verdict.value > verdict.value:
-            verdict = hypothesis_verdict
-
-        # Check 3: Scan user query for disallowed advisory patterns
-        if user_query:
-            query_verdict = self._check_query(user_query)
-            if query_verdict.value > verdict.value:
-                verdict = query_verdict
-
-        # Check 4: Scan protocol objective
-        objective_verdict = self._check_objective()
-        if objective_verdict.value > verdict.value:
-            verdict = objective_verdict
+        # Check 1-4: Local regex checks
+        verdict = self._run_local_checks(verdict, user_query)
 
         self.ps.safety_verdict = verdict
         self.ps.safety_notes = self.notes
 
         return verdict
+
+    def evaluate(self, user_query: Optional[str] = None) -> SafetyVerdict:
+        """
+        Run local safety checks only (no API call). Synchronous.
+        Used in tests and when Content Safety service is not configured.
+        """
+        self.notes = []
+        verdict = SafetyVerdict.ALLOW
+
+        verdict = self._run_local_checks(verdict, user_query)
+
+        self.ps.safety_verdict = verdict
+        self.ps.safety_notes = self.notes
+
+        return verdict
+
+    def _run_local_checks(
+        self, verdict: SafetyVerdict, user_query: Optional[str] = None,
+    ) -> SafetyVerdict:
+        """Run all local regex-based safety checks."""
+        # Check 1: Scan factors for safety-sensitive domains
+        factor_verdict = self._check_factors()
+        verdict = self._max_verdict(verdict, factor_verdict)
+
+        # Check 2: Scan hypotheses for clinical/bio content
+        hypothesis_verdict = self._check_hypotheses()
+        verdict = self._max_verdict(verdict, hypothesis_verdict)
+
+        # Check 3: Scan user query for disallowed advisory patterns
+        if user_query:
+            query_verdict = self._check_query(user_query)
+            verdict = self._max_verdict(verdict, query_verdict)
+
+        # Check 4: Scan protocol objective
+        objective_verdict = self._check_objective()
+        verdict = self._max_verdict(verdict, objective_verdict)
+
+        return verdict
+
+    async def _check_content_safety_api(
+        self, user_query: Optional[str] = None,
+    ) -> SafetyVerdict:
+        """Call Azure Content Safety API on combined text."""
+        parts = []
+        if self.ps.objective:
+            parts.append(self.ps.objective)
+        for h in self.ps.hypotheses:
+            parts.append(h.statement)
+        if user_query:
+            parts.append(user_query)
+
+        if not parts:
+            return SafetyVerdict.ALLOW
+
+        combined = " ".join(parts)
+        result = await self._content_safety.analyze_text(combined)
+        api_verdict = result.get("verdict", SafetyVerdict.ALLOW)
+
+        if api_verdict != SafetyVerdict.ALLOW:
+            self.notes.append(
+                f"Content Safety API: severity {result.get('max_severity', '?')} "
+                f"detected → {api_verdict.value}."
+            )
+
+        return api_verdict
 
     def _check_factors(self) -> SafetyVerdict:
         """Check if any factors are in safety-sensitive domains."""

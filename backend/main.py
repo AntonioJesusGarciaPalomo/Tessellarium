@@ -22,6 +22,10 @@ from app.doe_planner.planner import DOEPlanner
 from app.safety.governor import SafetyGovernor
 from app.agents.parser_agent import ParserAgent
 from app.services.cosmos_store import CosmosStore
+from app.services.content_safety_service import ContentSafetyService
+from app.services.content_understanding import (
+    ContentUnderstandingService, extract_text_from_pdf,
+)
 
 app = FastAPI(
     title=settings.app_name,
@@ -69,6 +73,33 @@ async def _load_session(session_id: str) -> Optional[ProblemSpace]:
     return _memory_sessions.get(session_id)
 
 
+# Content Safety service — initialized if endpoint is configured
+_content_safety: Optional[ContentSafetyService] = None
+
+
+def _get_content_safety() -> Optional[ContentSafetyService]:
+    global _content_safety
+    if _content_safety is None and settings.content_safety_endpoint and settings.content_safety_api_key:
+        _content_safety = ContentSafetyService(
+            endpoint=settings.content_safety_endpoint,
+            api_key=settings.content_safety_api_key,
+        )
+    return _content_safety
+
+
+# Content Understanding service — initialized if endpoint is configured
+_content_understanding: Optional[ContentUnderstandingService] = None
+
+
+def _get_content_understanding() -> Optional[ContentUnderstandingService]:
+    global _content_understanding
+    if _content_understanding is None and settings.content_understanding_endpoint:
+        _content_understanding = ContentUnderstandingService(
+            endpoint=settings.content_understanding_endpoint,
+        )
+    return _content_understanding
+
+
 # ─── Health Check ────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -88,31 +119,69 @@ async def upload_files(
     """
     Phase 1-2: Ingest files → extract structure → build ProblemSpace.
 
-    In the full implementation, this calls:
-    - Content Understanding for the PDF
-    - Code Interpreter for the CSV
-    - GPT-4o vision for the image
-    - Parser Agent to unify into ProblemSpace
-
-    For now, accepts a pre-structured JSON or processes files.
+    1. Content Understanding extracts structured text from the PDF
+    2. CSV content is read as text (Code Interpreter TODO)
+    3. Parser Agent structures everything into a ProblemSpace
     """
     session_id = str(uuid.uuid4())
 
-    # Create initial ProblemSpace
-    ps = ProblemSpace(
-        id=session_id,
-        max_runs_budget=max_runs_budget,
-        protocol_filename=protocol.filename if protocol else None,
-        csv_filename=csv_file.filename if csv_file else None,
-        image_filename=image.filename if image else None,
-    )
+    protocol_text = None
+    csv_text = None
 
-    # TODO: Phase 1 - Call Content Understanding for PDF extraction
-    # TODO: Phase 1 - Call Code Interpreter for CSV analysis
-    # TODO: Phase 1 - Call GPT-4o vision for image interpretation
-    # TODO: Phase 2 - Call Parser Agent to structure ProblemSpace
+    # Phase 1a: Extract text from protocol PDF
+    if protocol:
+        pdf_bytes = await protocol.read()
 
-    # For now, store the empty ProblemSpace
+        # Try Content Understanding first
+        cu_service = _get_content_understanding()
+        if cu_service:
+            protocol_text = await cu_service.analyze_protocol(
+                pdf_bytes, protocol.filename or "protocol.pdf",
+            )
+
+        # Fallback to local PDF extraction
+        if protocol_text is None and pdf_bytes:
+            protocol_text = await extract_text_from_pdf(pdf_bytes)
+
+    # Phase 1b: Read CSV as text (Code Interpreter analysis TODO)
+    if csv_file:
+        csv_bytes = await csv_file.read()
+        csv_text = csv_bytes.decode("utf-8", errors="replace")
+
+    # TODO: Phase 1c - Call GPT-4o vision for image interpretation
+
+    # Phase 2: Parser Agent structures inputs into ProblemSpace
+    if protocol_text or csv_text:
+        try:
+            parser = ParserAgent()
+            ps = await parser.parse(
+                protocol_text=protocol_text,
+                csv_analysis=csv_text,
+                max_runs_budget=max_runs_budget,
+            )
+            ps.id = session_id
+            ps.protocol_filename = protocol.filename if protocol else None
+            ps.csv_filename = csv_file.filename if csv_file else None
+            ps.image_filename = image.filename if image else None
+        except Exception as e:
+            # If Parser Agent fails, create empty ProblemSpace
+            ps = ProblemSpace(
+                id=session_id,
+                max_runs_budget=max_runs_budget,
+                protocol_filename=protocol.filename if protocol else None,
+                csv_filename=csv_file.filename if csv_file else None,
+                image_filename=image.filename if image else None,
+            )
+    else:
+        # No files to parse — create empty ProblemSpace
+        ps = ProblemSpace(
+            id=session_id,
+            max_runs_budget=max_runs_budget,
+            protocol_filename=protocol.filename if protocol else None,
+            csv_filename=csv_file.filename if csv_file else None,
+            image_filename=image.filename if image else None,
+        )
+
     await _save_session(ps)
 
     return UploadResponse(session_id=session_id, problem_space=ps)
@@ -189,8 +258,8 @@ async def compile_experiment(request: CompileRequest):
         ps.max_runs_budget = request.updated_budget
 
     # Phase 3: Safety Gate
-    governor = SafetyGovernor(ps)
-    verdict = governor.evaluate()
+    governor = SafetyGovernor(ps, content_safety_service=_get_content_safety())
+    verdict = await governor.evaluate_async()
 
     if verdict == SafetyVerdict.BLOCK:
         # Return evidence summary only
@@ -245,8 +314,8 @@ async def add_constraint(session_id: str, constraint: Constraint):
     ps.constraints.append(constraint)
 
     # Recompile
-    governor = SafetyGovernor(ps)
-    verdict = governor.evaluate()
+    governor = SafetyGovernor(ps, content_safety_service=_get_content_safety())
+    verdict = await governor.evaluate_async()
 
     if verdict != SafetyVerdict.BLOCK:
         planner = DOEPlanner(ps)
