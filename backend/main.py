@@ -21,6 +21,7 @@ from app.models.problem_space import (
 from app.doe_planner.planner import DOEPlanner
 from app.safety.governor import SafetyGovernor
 from app.agents.parser_agent import ParserAgent
+from app.services.cosmos_store import CosmosStore
 
 app = FastAPI(
     title=settings.app_name,
@@ -36,8 +37,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session store (Cosmos DB in production)
-sessions: dict[str, ProblemSpace] = {}
+# Session store — Cosmos DB when configured, in-memory fallback for local dev
+_cosmos_store: Optional[CosmosStore] = None
+_memory_sessions: dict[str, ProblemSpace] = {}
+
+
+def _get_store() -> Optional[CosmosStore]:
+    global _cosmos_store
+    if _cosmos_store is None and settings.cosmos_endpoint and settings.cosmos_key:
+        _cosmos_store = CosmosStore(
+            endpoint=settings.cosmos_endpoint,
+            key=settings.cosmos_key,
+            database_name=settings.cosmos_database,
+            container_name=settings.cosmos_sessions_container,
+        )
+    return _cosmos_store
+
+
+async def _save_session(ps: ProblemSpace) -> None:
+    store = _get_store()
+    if store:
+        await store.save_session(ps)
+    else:
+        _memory_sessions[ps.id] = ps
+
+
+async def _load_session(session_id: str) -> Optional[ProblemSpace]:
+    store = _get_store()
+    if store:
+        return await store.get_session(session_id)
+    return _memory_sessions.get(session_id)
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
@@ -84,7 +113,7 @@ async def upload_files(
     # TODO: Phase 2 - Call Parser Agent to structure ProblemSpace
 
     # For now, store the empty ProblemSpace
-    sessions[session_id] = ps
+    await _save_session(ps)
 
     return UploadResponse(session_id=session_id, problem_space=ps)
 
@@ -120,7 +149,7 @@ async def parse_inputs(request: ParseRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parser Agent failed: {str(e)}")
 
-    sessions[session_id] = ps
+    await _save_session(ps)
     return UploadResponse(session_id=session_id, problem_space=ps)
 
 
@@ -130,7 +159,7 @@ async def set_problem_space(session_id: str, problem_space: ProblemSpace):
     Directly set a ProblemSpace (for testing and for the Parser Agent output).
     """
     problem_space.id = session_id
-    sessions[session_id] = problem_space
+    await _save_session(problem_space)
     return {"status": "ok", "session_id": session_id}
 
 
@@ -147,7 +176,7 @@ async def compile_experiment(request: CompileRequest):
     3. Critic Agent reviews (LLM - TODO)
     4. Explainer Agent generates decision cards (LLM - TODO)
     """
-    ps = sessions.get(request.session_id)
+    ps = await _load_session(request.session_id)
     if not ps:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -181,6 +210,8 @@ async def compile_experiment(request: CompileRequest):
     # TODO: Phase 5 - Explainer Agent generates decision cards
     # TODO: Phase 5 - AI Search for grounding citations
 
+    await _save_session(ps)
+
     return CompileResponse(
         session_id=request.session_id,
         problem_space=ps,
@@ -199,7 +230,7 @@ async def add_constraint(session_id: str, constraint: Constraint):
     This is the "lot C is exhausted" moment in the demo.
     Returns the new plan + what discrimination was lost.
     """
-    ps = sessions.get(session_id)
+    ps = await _load_session(session_id)
     if not ps:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -223,6 +254,8 @@ async def add_constraint(session_id: str, constraint: Constraint):
     else:
         candidates = []
 
+    await _save_session(ps)
+
     return CompileResponse(
         session_id=session_id,
         problem_space=ps,
@@ -237,7 +270,7 @@ async def add_constraint(session_id: str, constraint: Constraint):
 @app.get("/api/coverage/{session_id}")
 async def get_coverage(session_id: str):
     """Return the coverage map for visualization."""
-    ps = sessions.get(session_id)
+    ps = await _load_session(session_id)
     if not ps:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -254,10 +287,30 @@ async def get_coverage(session_id: str):
 @app.get("/api/session/{session_id}")
 async def get_session(session_id: str):
     """Get the full ProblemSpace for a session."""
-    ps = sessions.get(session_id)
+    ps = await _load_session(session_id)
     if not ps:
         raise HTTPException(status_code=404, detail="Session not found")
     return ps.model_dump()
+
+
+# ─── List Sessions ───────────────────────────────────────────────────────────
+
+@app.get("/api/sessions")
+async def list_sessions(limit: int = 50):
+    """List recent session summaries."""
+    store = _get_store()
+    if store:
+        return await store.list_sessions(limit=limit)
+    # In-memory fallback
+    return [
+        {
+            "id": ps.id,
+            "objective": ps.objective,
+            "created_at": ps.created_at.isoformat(),
+            "updated_at": ps.updated_at.isoformat(),
+        }
+        for ps in list(_memory_sessions.values())[:limit]
+    ]
 
 
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
