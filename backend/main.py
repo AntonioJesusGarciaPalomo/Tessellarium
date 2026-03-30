@@ -26,6 +26,7 @@ from app.services.content_safety_service import ContentSafetyService
 from app.services.content_understanding import (
     ContentUnderstandingService, extract_text_from_pdf,
 )
+from app.services.search_service import SearchService
 
 app = FastAPI(
     title=settings.app_name,
@@ -98,6 +99,23 @@ def _get_content_understanding() -> Optional[ContentUnderstandingService]:
             endpoint=settings.content_understanding_endpoint,
         )
     return _content_understanding
+
+
+# Search service — Semantic Citation Layer
+_search_service: Optional[SearchService] = None
+
+
+def _get_search() -> Optional[SearchService]:
+    global _search_service
+    if _search_service is None and settings.search_endpoint and settings.search_api_key:
+        _search_service = SearchService(
+            endpoint=settings.search_endpoint,
+            api_key=settings.search_api_key,
+            index_name=settings.search_index_name,
+            embedding_endpoint=settings.azure_openai_endpoint or None,
+            embedding_key=settings.azure_openai_api_key or None,
+        )
+    return _search_service
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
@@ -277,7 +295,13 @@ async def compile_experiment(request: CompileRequest):
 
     # TODO: Phase 4b - Critic Agent reviews each candidate
     # TODO: Phase 5 - Explainer Agent generates decision cards
-    # TODO: Phase 5 - AI Search for grounding citations
+
+    # Index into Semantic Citation Layer
+    search_svc = _get_search()
+    if search_svc:
+        await search_svc.index_problem_space(ps)
+        for candidate in candidates:
+            await search_svc.index_compilation(ps, candidate)
 
     await _save_session(ps)
 
@@ -380,6 +404,33 @@ async def list_sessions(limit: int = 50):
         }
         for ps in list(_memory_sessions.values())[:limit]
     ]
+
+
+# ─── Search ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/search")
+async def search_citations(
+    q: str,
+    source_type: Optional[str] = None,
+    session_id: Optional[str] = None,
+    top: int = 5,
+):
+    """Search the Semantic Citation Layer for grounding evidence."""
+    search_svc = _get_search()
+    if not search_svc:
+        raise HTTPException(
+            status_code=503,
+            detail="Search service not configured",
+        )
+
+    filters = {}
+    if source_type:
+        filters["source_type"] = source_type
+    if session_id:
+        filters["session_id"] = session_id
+
+    results = await search_svc.search(query=q, filters=filters, top=top)
+    return {"query": q, "results": results, "count": len(results)}
 
 
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
