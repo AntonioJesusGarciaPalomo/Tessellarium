@@ -3,6 +3,7 @@ param name string
 param location string
 param tags object = {}
 param backendImageName string
+param leanImageName string = 'tessellarium-lean:latest'
 
 @secure()
 param openaiEndpoint string
@@ -20,6 +21,10 @@ param searchApiKey string
 param cosmosEndpoint string
 @secure()
 param cosmosKey string
+@secure()
+param storageConnectionString string
+@secure()
+param leanMcpToken string = 'tessellarium-lean-token-change-me'
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${name}'
@@ -54,6 +59,8 @@ resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
+// ─── Backend Container App ──────────────────────────────────────────
+
 resource backend 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-tessellarium-backend'
   location: location
@@ -76,6 +83,8 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'safety-key', value: contentSafetyApiKey }
         { name: 'search-key', value: searchApiKey }
         { name: 'cosmos-key', value: cosmosKey }
+        { name: 'storage-conn', value: storageConnectionString }
+        { name: 'lean-mcp-token', value: leanMcpToken }
       ]
     }
     template: {
@@ -93,6 +102,9 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'SEARCH_API_KEY', secretRef: 'search-key' }
             { name: 'COSMOS_ENDPOINT', value: cosmosEndpoint }
             { name: 'COSMOS_KEY', secretRef: 'cosmos-key' }
+            { name: 'STORAGE_CONNECTION_STRING', secretRef: 'storage-conn' }
+            { name: 'LEAN_SERVICE_URL', value: 'http://ca-tessellarium-lean:8000/mcp' }
+            { name: 'LEAN_MCP_TOKEN', secretRef: 'lean-mcp-token' }
           ]
         }
       ]
@@ -101,6 +113,43 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// ─── Lean Verification Container App ────────────────────────────────
+
+resource lean 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-tessellarium-lean'
+  location: location
+  tags: tags
+  properties: {
+    managedEnvironmentId: env.id
+    configuration: {
+      ingress: {
+        external: true
+        targetPort: 8000
+        transport: 'auto'
+      }
+      secrets: [
+        { name: 'lean-mcp-token', value: leanMcpToken }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'lean'
+          image: leanImageName
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+          env: [
+            { name: 'LEAN_PROJECT_PATH', value: '/workspace' }
+            { name: 'LEAN_LSP_MCP_TOKEN', secretRef: 'lean-mcp-token' }
+            { name: 'LEAN_REPL', value: 'true' }
+          ]
+        }
+      ]
+      scale: { minReplicas: 0, maxReplicas: 1 }
+    }
+  }
+}
+
 output backendUrl string = 'https://${backend.properties.configuration.ingress.fqdn}'
+output leanInternalUrl string = 'http://ca-tessellarium-lean'
 output registryLoginServer string = containerRegistry.properties.loginServer
 output registryName string = containerRegistry.name
