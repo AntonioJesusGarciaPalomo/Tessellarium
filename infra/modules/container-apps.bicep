@@ -1,30 +1,35 @@
+// ──────────────────────────────────────────────────────────────────────
+// Tessellarium — Container Apps (Production)
+// Workload profiles environment, 3 apps, managed identity auth
+// ──────────────────────────────────────────────────────────────────────
+
 @description('Name of the Container Apps Environment')
 param name string
 param location string
 param tags object = {}
-param backendImageName string
-param leanImageName string = 'tessellarium-lean:latest'
+
+@description('Subnet ID for the Container Apps Environment (delegated)')
+param subnetId string
+
+@description('User-assigned managed identity resource ID')
+param appIdentityId string
+
+@description('ACR login server (e.g. crtess.azurecr.io)')
+param acrLoginServer string
+
+// ─── Service endpoints (managed identity — no keys) ─────────────────
+param openaiEndpoint string
+param contentSafetyEndpoint string
+param searchEndpoint string
+param cosmosEndpoint string
+param storageEndpoint string
+param foundryEndpoint string = ''
+param foundryProject string = ''
 
 @secure()
-param openaiEndpoint string
-@secure()
-param openaiApiKey string
-@secure()
-param contentSafetyEndpoint string
-@secure()
-param contentSafetyApiKey string
-@secure()
-param searchEndpoint string
-@secure()
-param searchApiKey string
-@secure()
-param cosmosEndpoint string
-@secure()
-param cosmosKey string
-@secure()
-param storageConnectionString string
-@secure()
 param leanMcpToken string = 'tessellarium-lean-token-change-me'
+
+// ─── Log Analytics ──────────────────────────────────────────────────
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${name}'
@@ -36,13 +41,17 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
+// ─── Container Registry ─────────────────────────────────────────────
+
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   name: replace('cr${name}', '-', '')
   location: location
   tags: tags
   sku: { name: 'Basic' }
-  properties: { adminUserEnabled: true }
+  properties: { adminUserEnabled: false }
 }
+
+// ─── Container Apps Environment (Workload Profiles) ─────────────────
 
 resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: name
@@ -56,17 +65,40 @@ resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
         sharedKey: logAnalytics.listKeys().primarySharedKey
       }
     }
+    vnetConfiguration: {
+      infrastructureSubnetId: subnetId
+      internal: false
+    }
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+      {
+        name: 'Dedicated-D4'
+        workloadProfileType: 'D4'
+        minimumCount: 0
+        maximumCount: 3
+      }
+    ]
   }
 }
 
-// ─── Backend Container App ──────────────────────────────────────────
+// ─── tess-api (Backend API) ─────────────────────────────────────────
 
-resource backend 'Microsoft.App/containerApps@2024-03-01' = {
-  name: 'ca-tessellarium-backend'
+resource tessApi 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-tess-api'
   location: location
   tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appIdentityId}': {}
+    }
+  }
   properties: {
     managedEnvironmentId: env.id
+    workloadProfileName: 'Consumption'
     configuration: {
       ingress: {
         external: true
@@ -78,32 +110,32 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
           allowedHeaders: ['*']
         }
       }
+      registries: [
+        {
+          server: acrLoginServer
+          identity: appIdentityId
+        }
+      ]
       secrets: [
-        { name: 'openai-key', value: openaiApiKey }
-        { name: 'safety-key', value: contentSafetyApiKey }
-        { name: 'search-key', value: searchApiKey }
-        { name: 'cosmos-key', value: cosmosKey }
-        { name: 'storage-conn', value: storageConnectionString }
         { name: 'lean-mcp-token', value: leanMcpToken }
       ]
     }
     template: {
       containers: [
         {
-          name: 'backend'
-          image: backendImageName
+          name: 'api'
+          image: '${acrLoginServer}/tessellarium-backend:latest'
           resources: { cpu: json('1.0'), memory: '2Gi' }
           env: [
             { name: 'AZURE_OPENAI_ENDPOINT', value: openaiEndpoint }
-            { name: 'AZURE_OPENAI_API_KEY', secretRef: 'openai-key' }
             { name: 'CONTENT_SAFETY_ENDPOINT', value: contentSafetyEndpoint }
-            { name: 'CONTENT_SAFETY_API_KEY', secretRef: 'safety-key' }
             { name: 'SEARCH_ENDPOINT', value: searchEndpoint }
-            { name: 'SEARCH_API_KEY', secretRef: 'search-key' }
             { name: 'COSMOS_ENDPOINT', value: cosmosEndpoint }
-            { name: 'COSMOS_KEY', secretRef: 'cosmos-key' }
-            { name: 'STORAGE_CONNECTION_STRING', secretRef: 'storage-conn' }
-            { name: 'LEAN_SERVICE_URL', value: 'http://ca-tessellarium-lean:8000/mcp' }
+            { name: 'STORAGE_ENDPOINT', value: storageEndpoint }
+            { name: 'AZURE_FOUNDRY_ENDPOINT', value: foundryEndpoint }
+            { name: 'AZURE_FOUNDRY_PROJECT', value: foundryProject }
+            { name: 'AZURE_CLIENT_ID', value: '' } // set via identity
+            { name: 'LEAN_SERVICE_URL', value: 'https://ca-tess-lean.internal.${env.properties.defaultDomain}:8001' }
             { name: 'LEAN_MCP_TOKEN', secretRef: 'lean-mcp-token' }
           ]
         }
@@ -113,20 +145,71 @@ resource backend 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// ─── Lean Verification Container App ────────────────────────────────
+// ─── tess-worker (Background tasks: indexing, verification dispatch) ─
 
-resource lean 'Microsoft.App/containerApps@2024-03-01' = {
-  name: 'ca-tessellarium-lean'
+resource tessWorker 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-tess-worker'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appIdentityId}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: env.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      registries: [
+        {
+          server: acrLoginServer
+          identity: appIdentityId
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'worker'
+          image: '${acrLoginServer}/tessellarium-backend:latest'
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+          env: [
+            { name: 'AZURE_OPENAI_ENDPOINT', value: openaiEndpoint }
+            { name: 'SEARCH_ENDPOINT', value: searchEndpoint }
+            { name: 'COSMOS_ENDPOINT', value: cosmosEndpoint }
+            { name: 'STORAGE_ENDPOINT', value: storageEndpoint }
+            { name: 'WORKER_MODE', value: 'true' }
+          ]
+          command: ['python', '-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000']
+        }
+      ]
+      scale: { minReplicas: 0, maxReplicas: 2 }
+    }
+  }
+}
+
+// ─── tess-lean-verify (Lean 4 verification service) ─────────────────
+
+resource tessLean 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-tess-lean'
   location: location
   tags: tags
   properties: {
     managedEnvironmentId: env.id
+    workloadProfileName: 'Dedicated-D4'
     configuration: {
       ingress: {
         external: true
-        targetPort: 8000
+        targetPort: 8001
         transport: 'auto'
       }
+      registries: [
+        {
+          server: acrLoginServer
+          identity: appIdentityId
+        }
+      ]
       secrets: [
         { name: 'lean-mcp-token', value: leanMcpToken }
       ]
@@ -135,7 +218,7 @@ resource lean 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'lean'
-          image: leanImageName
+          image: '${acrLoginServer}/tessellarium-lean:latest'
           resources: { cpu: json('2.0'), memory: '4Gi' }
           env: [
             { name: 'LEAN_PROJECT_PATH', value: '/workspace' }
@@ -149,7 +232,12 @@ resource lean 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-output backendUrl string = 'https://${backend.properties.configuration.ingress.fqdn}'
-output leanInternalUrl string = 'http://ca-tessellarium-lean'
+// ─── Outputs ────────────────────────────────────────────────────────
+
+output apiUrl string = 'https://${tessApi.properties.configuration.ingress.fqdn}'
+output apiFqdn string = tessApi.properties.configuration.ingress.fqdn
+output leanUrl string = 'https://${tessLean.properties.configuration.ingress.fqdn}'
 output registryLoginServer string = containerRegistry.properties.loginServer
 output registryName string = containerRegistry.name
+output registryId string = containerRegistry.id
+output environmentDefaultDomain string = env.properties.defaultDomain

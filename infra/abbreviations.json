@@ -9,5 +9,11 @@
   "logAnalyticsWorkspace": "log-",
   "staticWebApp": "swa-",
   "managedIdentity": "id-",
-  "storageAccount": "st"
+  "storageAccount": "st",
+  "virtualNetwork": "vnet-",
+  "privateEndpoint": "pe-",
+  "frontDoor": "afd-",
+  "keyVault": "kv-",
+  "machineLearningWorkspace": "hub-",
+  "machineLearningProject": "proj-"
 }

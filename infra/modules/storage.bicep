@@ -1,3 +1,8 @@
+// ──────────────────────────────────────────────────────────────────────
+// Tessellarium — Azure Blob Storage (Production)
+// Private endpoint ready, HTTPS only
+// ──────────────────────────────────────────────────────────────────────
+
 @description('Name of the Storage account')
 param name string
 param location string
@@ -14,6 +19,11 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    publicNetworkAccess: 'Disabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      bypass: 'AzureServices'
+    }
   }
 }
 
@@ -40,6 +50,6 @@ resource literatureContainer 'Microsoft.Storage/storageAccounts/blobServices/con
   properties: { publicAccess: 'None' }
 }
 
+output id string = storage.id
 output endpoint string = storage.properties.primaryEndpoints.blob
-output connectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
 output name string = storage.name
