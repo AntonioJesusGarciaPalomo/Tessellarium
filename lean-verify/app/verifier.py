@@ -125,9 +125,18 @@ async def _compile_lean(lean_code: str, timeout: int) -> VerificationResponse:
             env={**os.environ, "LAKE_HOME": str(project_dir / ".lake")},
         )
 
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout,
-        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return VerificationResponse(
+                status=VerificationStatus.TIMEOUT,
+                property_verified="",
+                details=f"Lean compilation timed out after {timeout}s",
+            )
 
         stdout_text = stdout.decode("utf-8", errors="replace")
         stderr_text = stderr.decode("utf-8", errors="replace")

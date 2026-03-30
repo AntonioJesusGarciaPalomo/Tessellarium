@@ -175,6 +175,10 @@ class SafetyGovernor:
         verdict = SafetyVerdict.ALLOW
 
         for factor in self.ps.factors:
+            if factor.is_safety_sensitive:
+                verdict = SafetyVerdict.DEGRADE
+                continue
+
             factor_text = f"{factor.name} {' '.join(l.name for l in factor.levels)}"
 
             if self._matches_patterns(factor_text, CLINICAL_PATTERNS):

@@ -10,9 +10,6 @@ param tags object = {}
 @description('Backend Container App FQDN (e.g. ca-tess-api.niceground-abc.swedencentral.azurecontainerapps.io)')
 param backendFqdn string
 
-@description('Static Web App default hostname')
-param frontendHostname string
-
 // ─── WAF Policy ─────────────────────────────────────────────────────
 
 resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@2024-02-01' = {

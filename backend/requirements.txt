@@ -15,10 +15,6 @@ azure-ai-contentsafety==1.0.0
 azure-cosmos==4.9.0
 openai==1.82.0
 
-# DOE Planner (deterministic computation)
-numpy==2.2.3
-pandas==2.2.3
-
 # Utilities
 aiofiles==24.1.0
 orjson==3.10.15

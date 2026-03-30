@@ -4,7 +4,7 @@ import type {
   Constraint, SessionSummary,
 } from '../types'
 
-const api = axios.create({ baseURL: '/api' })
+const api = axios.create({ baseURL: '/api', timeout: 120000 })
 
 export async function uploadFiles(formData: FormData): Promise<UploadResponse> {
   const { data } = await api.post<UploadResponse>('/upload', formData, {

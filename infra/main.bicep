@@ -236,7 +236,6 @@ module frontDoor './modules/front-door.bicep' = {
     name: resourceToken
     tags: tags
     backendFqdn: containerApps.outputs.apiFqdn
-    frontendHostname: staticWebApp.outputs.url
   }
 }
 

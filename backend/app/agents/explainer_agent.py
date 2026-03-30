@@ -322,7 +322,7 @@ class ExplainerAgent(AgentBase):
         if candidate.constraint_costs:
             parts.append("Constraint costs:")
             for cost in candidate.constraint_costs:
-                parts.append(f"  {cost.get('constraint_description', '')}")
+                parts.append(f"  {cost.constraint_description}")
             parts.append("")
 
         # Critique (if available)

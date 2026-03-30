@@ -160,6 +160,9 @@ async def health():
     return {"status": "ok", "app": settings.app_name, "version": settings.app_version}
 
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
 # ─── Upload & Parse ──────────────────────────────────────────────────────────
 
 @app.post("/api/upload", response_model=UploadResponse)
@@ -184,6 +187,8 @@ async def upload_files(
     # Phase 1a: Extract text from protocol PDF
     if protocol:
         pdf_bytes = await protocol.read()
+        if len(pdf_bytes) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Protocol file too large (max 50 MB)")
 
         # Try Content Understanding first
         cu_service = _get_content_understanding()
@@ -338,7 +343,8 @@ async def compile_experiment(request: CompileRequest):
     async def _critique_one(c: ExperimentCandidate) -> None:
         try:
             await critic.critique(ps, c)
-        except Exception:
+        except Exception as e:
+            logger.warning("Critic LLM failed for %s: %s. Using offline.", c.id, e)
             critic.critique_offline(ps, c)
 
     await asyncio.gather(*[_critique_one(c) for c in candidates])
@@ -354,7 +360,8 @@ async def compile_experiment(request: CompileRequest):
             grounding = await search_svc.search(query=query, top=5)
         try:
             await explainer.explain(ps, c, grounding)
-        except Exception:
+        except Exception as e:
+            logger.warning("Explainer LLM failed for %s: %s. Using offline.", c.id, e)
             explainer.explain_offline(ps, c, grounding)
 
     await asyncio.gather(*[_explain_one(c) for c in candidates])

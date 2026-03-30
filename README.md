@@ -37,7 +37,7 @@ The core engine is a **deterministic Python planner — not a language model** �
 ## How it works
 
 **1. Multimodal ingestion.**
-The researcher uploads a protocol (PDF), experimental results (CSV), and optionally an assay image. Azure Content Understanding extracts document structure, Code Interpreter analyzes the data, and GPT-4o vision interprets the image.
+The researcher uploads a protocol (PDF), experimental results (CSV), and optionally an assay image. Azure Content Understanding extracts document structure. Code Interpreter for CSV analysis and GPT-4o vision for image interpretation are planned.
 
 **2. Problem space construction.**
 A Parser Agent (GPT-4o) structures all extracted information into a unified representation: factors and their levels, competing hypotheses with epistemic and operative states, existing evidence, constraints, and already-tested combinations.
@@ -276,6 +276,18 @@ tessellarium/
 | `POST` | `/api/constrain/{id}` | Add constraint → recalculate → show cost |
 | `GET` | `/api/coverage/{id}` | Coverage map for visualization |
 | `GET` | `/api/session/{id}` | Full ProblemSpace |
+| `GET` | `/api/sessions` | List session summaries |
+| `GET` | `/api/search?q={query}` | Search the Semantic Citation Layer |
+
+---
+
+## Current limitations
+
+- **Code Interpreter** for CSV analysis is planned but not yet implemented (CSV is read as raw text)
+- **GPT-4o vision** for image interpretation is planned but not yet implemented
+- **MOLS/BIBD algebraic construction** is not implemented — the DOE Planner uses covering arrays and fractional factorials
+- **Semantic Citation Layer** (literature knowledge base) is on the roadmap; current grounding uses the researcher's own data
+- **Foundry Agent Service** integration is optional — the system falls back to direct Azure OpenAI calls
 
 ---
 

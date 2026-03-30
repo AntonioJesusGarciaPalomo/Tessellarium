@@ -132,12 +132,15 @@ class AgentBase:
         self._direct_client = None
 
         if not self._foundry:
-            from openai import AzureOpenAI
-            self._direct_client = AzureOpenAI(
-                azure_endpoint=azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-                api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY", ""),
-                api_version=api_version,
-            )
+            endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", "")
+            key = api_key or os.getenv("AZURE_OPENAI_API_KEY", "")
+            if endpoint and key:
+                from openai import AzureOpenAI
+                self._direct_client = AzureOpenAI(
+                    azure_endpoint=endpoint,
+                    api_key=key,
+                    api_version=api_version,
+                )
 
     @property
     def is_foundry_mode(self) -> bool:
@@ -164,7 +167,7 @@ class AgentBase:
                 max_tokens=max_tokens,
                 response_format=response_format,
             )
-        else:
+        elif self._direct_client:
             kwargs = dict(
                 model=self.model,
                 messages=[
@@ -179,6 +182,11 @@ class AgentBase:
 
             response = self._direct_client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
+        else:
+            raise RuntimeError(
+                "No LLM backend configured. Set AZURE_OPENAI_ENDPOINT "
+                "and AZURE_OPENAI_API_KEY, or configure Foundry."
+            )
 
     def _call_llm_sync(
         self,

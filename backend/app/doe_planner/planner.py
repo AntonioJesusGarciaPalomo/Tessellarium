@@ -132,14 +132,24 @@ class DOEPlanner:
         """Build a dict of excluded combination keys → reason."""
         excluded = {}
         for constraint in self.ps.constraints:
-            # Exclude specific level of a factor
             if constraint.excluded_factor_id and constraint.excluded_level_id:
+                # Exclude specific level of a factor
                 for cell in self._combos_with_level(
                     constraint.excluded_factor_id,
                     constraint.excluded_level_id,
                 ):
                     key = self._combo_key(cell)
                     excluded[key] = constraint.description
+            elif constraint.excluded_factor_id and not constraint.excluded_level_id:
+                # Exclude entire factor — all levels
+                factor = self.ps.get_factor_by_id(constraint.excluded_factor_id)
+                if factor:
+                    for level in factor.levels:
+                        for cell in self._combos_with_level(
+                            constraint.excluded_factor_id, level.id,
+                        ):
+                            key = self._combo_key(cell)
+                            excluded[key] = constraint.description
 
             # Exclude specific combinations
             for combo in constraint.excluded_combinations:
@@ -451,6 +461,7 @@ class DOEPlanner:
 
         uncovered = set(all_pairs_to_cover)
         selected = []
+        selected_keys: set[str] = set()
 
         for _ in range(min(budget, len(untested))):
             if not uncovered:
@@ -460,7 +471,7 @@ class DOEPlanner:
             best_combo = None
             best_count = -1
             for combo in untested:
-                if combo in selected:
+                if self._combo_key(combo) in selected_keys:
                     continue
                 count = 0
                 for i, f1 in enumerate(factors):
@@ -477,6 +488,7 @@ class DOEPlanner:
                 break
 
             selected.append(best_combo)
+            selected_keys.add(self._combo_key(best_combo))
 
             # Remove covered pairs
             for i, f1 in enumerate(factors):

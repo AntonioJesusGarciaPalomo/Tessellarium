@@ -109,7 +109,7 @@ resource agentSearch 'Microsoft.Search/searchServices@2024-06-01-preview' = {
 // ─── Agent Key Vault ────────────────────────────────────────────────
 
 resource agentKeyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-ag-${name}'
+  name: take('kvag${replace(name, '-', '')}', 24)
   location: location
   tags: tags
   properties: {
