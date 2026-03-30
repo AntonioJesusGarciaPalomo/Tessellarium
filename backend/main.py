@@ -13,6 +13,7 @@ from typing import Optional
 import logging
 import uuid
 import json
+from datetime import datetime
 
 import httpx
 
@@ -376,6 +377,7 @@ async def compile_experiment(request: CompileRequest):
                     request.session_id, candidate.decision_card,
                 )
 
+    ps.updated_at = datetime.utcnow()
     await _save_session(ps)
 
     return CompileResponse(
@@ -417,9 +419,46 @@ async def add_constraint(session_id: str, constraint: Constraint):
     if verdict != SafetyVerdict.BLOCK:
         planner = DOEPlanner(ps)
         candidates = planner.compile()
+
+        # Lean verification
+        if settings.lean_service_url:
+            for candidate in candidates:
+                await _verify_candidate(candidate)
+
+        # Critic Agent
+        critic = CriticAgent()
+        for candidate in candidates:
+            try:
+                await critic.critique(ps, candidate)
+            except Exception:
+                critic.critique_offline(ps, candidate)
+
+        # Explainer Agent with grounding
+        search_svc = _get_search()
+        explainer = ExplainerAgent()
+        for candidate in candidates:
+            grounding = []
+            if search_svc:
+                query = f"{ps.objective} {candidate.justification}"
+                grounding = await search_svc.search(query=query, top=5)
+            try:
+                await explainer.explain(ps, candidate, grounding)
+            except Exception:
+                explainer.explain_offline(ps, candidate, grounding)
+
+        # Index into Semantic Citation Layer
+        if search_svc:
+            await search_svc.index_problem_space(ps)
+            for candidate in candidates:
+                await search_svc.index_compilation(ps, candidate)
+                if candidate.decision_card:
+                    await search_svc.index_decision_card(
+                        session_id, candidate.decision_card,
+                    )
     else:
         candidates = []
 
+    ps.updated_at = datetime.utcnow()
     await _save_session(ps)
 
     return CompileResponse(

@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 # ─── Domain-specific safety patterns ────────────────────────────────────────
 
 CLINICAL_PATTERNS = [
-    r"\b(diagnos|prescri|dosag|dosing|patient|treatment\s+plan)\b",
-    r"\b(administer|inject|infuse|transfuse)\b",
+    r"\b(diagnos|prescri|dosag|dosing|patient|treatment\s+plan)",
+    r"\b(administr|inject|infus|transfus)",
     r"\b(clinical\s+trial|phase\s+[I1-3]|human\s+subject)\b",
-    r"\b(drug|medication|therapeutic|pharmacol)\b",
-    r"\b(symptom|prognosis|pathology|etiology)\b",
+    r"\b(drug|medication|therapeutic|pharmacol)",
+    r"\b(symptom|prognosis|patholog|etiolog)",
 ]
 
 BIO_HAZARD_PATTERNS = [
@@ -38,11 +38,11 @@ BIO_HAZARD_PATTERNS = [
     r"\b(pathogen|infectious|contagious|virulent)\b",
     r"\b(toxin|carcinogen|mutagen|teratogen)\b",
     r"\b(gene\s+edit|CRISPR|gene\s+therapy|viral\s+vector)\b",
-    r"\b(radioactiv|ionizing|irradiat)\b",
+    r"\b(radioactiv|ionizing|irradiat)",
 ]
 
 DISALLOWED_ADVISORY_PATTERNS = [
-    r"\b(should\s+I|recommend|advise|suggest)\s+(tak|us|administer|prescri)",
+    r"\b(should\s+I|recommend|advise|suggest)\s+(tak|us(?:e|ing)|administr|prescri)",
     r"\b(what\s+(dose|amount|concentration))\s+(should|would|to\s+give)\b",
     r"\b(is\s+it\s+safe\s+to|can\s+I\s+safely)\b",
 ]
