@@ -103,7 +103,8 @@ class FoundryClient:
         if response_format:
             kwargs["response_format"] = response_format
 
-        response = client.complete(**kwargs)
+        import asyncio
+        response = await asyncio.to_thread(client.complete, **kwargs)
         return response.choices[0].message.content
 
 

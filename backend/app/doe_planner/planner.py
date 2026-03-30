@@ -22,13 +22,13 @@ Design family selection follows Fisher's DOE tradition:
 
 from itertools import product as cartesian_product
 from typing import Optional
-import numpy as np
 from collections import defaultdict
 
 from app.models.problem_space import (
     ProblemSpace, Factor, Level, Hypothesis, Constraint,
     ExperimentCandidate, DesignMatrix, DiscriminationPair,
     CoverageCell, CandidateStrategy, DesignFamily, ExperimentalRun,
+    ConstraintCost, AffectedPair,
 )
 
 
@@ -126,7 +126,7 @@ class DOEPlanner:
 
         self.ps.coverage_map = coverage_map
         self.ps.total_combinations = len(all_combos)
-        self.ps.tested_combinations = len(tested_set)
+        self.ps.tested_combinations = sum(1 for c in coverage_map if c.is_tested)
 
     def _build_excluded_set(self) -> dict[str, str]:
         """Build a dict of excluded combination keys → reason."""
@@ -172,14 +172,24 @@ class DOEPlanner:
         For each pair of hypotheses, find which untested combinations
         would discriminate between them.
 
-        Discrimination logic: a combination discriminates H_a from H_b if
-        the factors in that combination include at least one factor where
-        H_a and H_b predict different outcomes (i.e., the factor is in
-        the distinguishing_factors of either hypothesis).
+        A combination discriminates H_a from H_b if:
+        1. It includes at least one distinguishing factor, AND
+        2. It varies the distinguishing factor(s) relative to at least one
+           tested run (same non-distinguishing levels, different distinguishing
+           level), OR it covers a distinguishing factor-level not yet seen.
+        3. If no completed runs exist, any untested combo with a
+           distinguishing factor is informative.
         """
+        # Clear stale annotations from previous compilations
+        for cell in self.ps.coverage_map:
+            cell.is_discriminative_for = []
+
         hypotheses = self.ps.hypotheses
         if len(hypotheses) < 2:
             return {}
+
+        tested_combos = [run.combination for run in self.ps.completed_runs]
+        all_factor_ids = {f.id for f in self.ps.factors}
 
         pairs: dict[str, DiscriminationPair] = {}
 
@@ -187,27 +197,65 @@ class DOEPlanner:
             for h_b in hypotheses[i + 1:]:
                 pair_key = f"{h_a.id}-vs-{h_b.id}"
 
-                # Factors that distinguish these two hypotheses
                 distinguishing = set(h_a.distinguishing_factors) | set(
                     h_b.distinguishing_factors
                 )
-
-                # If no distinguishing factors are declared, use ALL factors
                 if not distinguishing:
-                    distinguishing = {f.id for f in self.ps.factors}
+                    distinguishing = all_factor_ids
 
-                # Find untested, non-excluded combinations that involve
-                # at least one distinguishing factor with variation
+                non_distinguishing = all_factor_ids - distinguishing
+
                 discriminating_combos = []
                 for cell in self.ps.coverage_map:
                     if cell.is_tested or cell.is_excluded:
                         continue
-                    # Check if this combination varies on a distinguishing factor
-                    has_variation = any(
-                        fid in distinguishing for fid in cell.combination.keys()
-                    )
-                    if has_variation:
-                        discriminating_combos.append(cell.combination)
+
+                    combo = cell.combination
+                    combo_dist_factors = {
+                        fid for fid in combo if fid in distinguishing
+                    }
+                    if not combo_dist_factors:
+                        continue
+
+                    if not tested_combos:
+                        discriminating_combos.append(combo)
+                        cell.is_discriminative_for.append(pair_key)
+                        continue
+
+                    is_discriminating = False
+
+                    # Check for a tested run that matches on non-distinguishing
+                    # factors but differs on at least one distinguishing factor
+                    for tested in tested_combos:
+                        non_dist_match = all(
+                            combo.get(fid) == tested.get(fid)
+                            for fid in non_distinguishing
+                            if fid in combo and fid in tested
+                        )
+                        if not non_dist_match:
+                            continue
+                        dist_differs = any(
+                            combo.get(fid) != tested.get(fid)
+                            for fid in distinguishing
+                            if fid in combo and fid in tested
+                        )
+                        if dist_differs:
+                            is_discriminating = True
+                            break
+
+                    # Also discriminating if it covers a distinguishing
+                    # factor-level not yet seen in any tested run
+                    if not is_discriminating:
+                        for fid in combo_dist_factors:
+                            level = combo.get(fid)
+                            if level and not any(
+                                t.get(fid) == level for t in tested_combos
+                            ):
+                                is_discriminating = True
+                                break
+
+                    if is_discriminating:
+                        discriminating_combos.append(combo)
                         cell.is_discriminative_for.append(pair_key)
 
                 total_possible = sum(
@@ -334,19 +382,19 @@ class DOEPlanner:
         budget: int,
     ) -> tuple[list[dict], str]:
         """
-        Select combinations that provide replication for the strongest
-        hypothesis pair (the one with most existing evidence).
-        Focus on the pair with highest current discrimination power.
+        Select combinations that provide replication for the weakest
+        hypothesis pair (the one with lowest discrimination power).
+        This ensures the most uncertain distinction gets more evidence.
         """
         if not disc_matrix:
             return untested[:budget], "No hypothesis pairs to optimize for."
 
-        # Find the pair with highest discrimination power
-        best_pair = max(disc_matrix.values(), key=lambda p: p.discrimination_power)
+        # Find the pair with LOWEST discrimination power (weakest link)
+        weakest_pair = min(disc_matrix.values(), key=lambda p: p.discrimination_power)
 
         # Prioritize combinations that discriminate this pair
         pair_combos = {
-            self._combo_key(c) for c in best_pair.discriminating_combinations
+            self._combo_key(c) for c in weakest_pair.discriminating_combinations
         }
 
         priority = []
@@ -361,10 +409,10 @@ class DOEPlanner:
 
         justification = (
             f"Selected {len(selected)} runs (budget: {budget}) "
-            f"prioritizing robustness for strongest pair: "
-            f"{best_pair.hypothesis_a_id} vs {best_pair.hypothesis_b_id} "
-            f"(power: {best_pair.discrimination_power:.3f}). "
-            f"{len(priority)} runs target this pair directly."
+            f"prioritizing robustness for weakest pair: "
+            f"{weakest_pair.hypothesis_a_id} vs {weakest_pair.hypothesis_b_id} "
+            f"(power: {weakest_pair.discrimination_power:.3f}). "
+            f"{min(len(priority), budget)} runs target this pair directly."
         )
         return selected, justification
 
@@ -512,7 +560,7 @@ class DOEPlanner:
     def _calculate_constraint_costs(
         self,
         disc_matrix: dict[str, DiscriminationPair],
-    ) -> list[dict]:
+    ) -> list[ConstraintCost]:
         """
         For each constraint, calculate what discrimination is lost.
         This answers: "what do I lose if I can't use lot C?"
@@ -521,28 +569,27 @@ class DOEPlanner:
         for constraint in self.ps.constraints:
             affected_pairs = []
             for pair_key, pair in disc_matrix.items():
-                # Count how many discriminating combos are excluded
                 excluded_count = 0
                 for combo in pair.discriminating_combinations:
                     if self._is_excluded_by_constraint(combo, constraint):
                         excluded_count += 1
                 if excluded_count > 0:
                     total = len(pair.discriminating_combinations)
-                    affected_pairs.append({
-                        "pair": pair_key,
-                        "excluded_runs": excluded_count,
-                        "total_discriminating": total,
-                        "lost_fraction": round(
+                    affected_pairs.append(AffectedPair(
+                        pair=pair_key,
+                        excluded_runs=excluded_count,
+                        total_discriminating=total,
+                        lost_fraction=round(
                             excluded_count / total if total > 0 else 0, 3
                         ),
-                    })
+                    ))
 
             if affected_pairs:
-                costs.append({
-                    "constraint_id": constraint.id,
-                    "constraint_description": constraint.description,
-                    "affected_hypothesis_pairs": affected_pairs,
-                })
+                costs.append(ConstraintCost(
+                    constraint_id=constraint.id,
+                    constraint_description=constraint.description,
+                    affected_hypothesis_pairs=affected_pairs,
+                ))
 
         return costs
 

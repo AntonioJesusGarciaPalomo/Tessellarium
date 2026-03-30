@@ -10,10 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+from functools import lru_cache
+import asyncio
 import logging
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -43,29 +45,29 @@ app = FastAPI(
     description="Unbiased experimental mosaics, by design.",
 )
 
+cors_origins = settings.cors_origins.split(",") if settings.cors_origins != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Session store — Cosmos DB when configured, in-memory fallback for local dev
-_cosmos_store: Optional[CosmosStore] = None
+# In-memory fallback for local dev (when Cosmos is not configured)
 _memory_sessions: dict[str, ProblemSpace] = {}
 
 
+@lru_cache(maxsize=1)
 def _get_store() -> Optional[CosmosStore]:
-    global _cosmos_store
-    if _cosmos_store is None and settings.cosmos_endpoint and settings.cosmos_key:
-        _cosmos_store = CosmosStore(
+    if settings.cosmos_endpoint and settings.cosmos_key:
+        return CosmosStore(
             endpoint=settings.cosmos_endpoint,
             key=settings.cosmos_key,
             database_name=settings.cosmos_database,
             container_name=settings.cosmos_sessions_container,
         )
-    return _cosmos_store
+    return None
 
 
 async def _save_session(ps: ProblemSpace) -> None:
@@ -83,48 +85,36 @@ async def _load_session(session_id: str) -> Optional[ProblemSpace]:
     return _memory_sessions.get(session_id)
 
 
-# Content Safety service — initialized if endpoint is configured
-_content_safety: Optional[ContentSafetyService] = None
-
-
+@lru_cache(maxsize=1)
 def _get_content_safety() -> Optional[ContentSafetyService]:
-    global _content_safety
-    if _content_safety is None and settings.content_safety_endpoint and settings.content_safety_api_key:
-        _content_safety = ContentSafetyService(
+    if settings.content_safety_endpoint and settings.content_safety_api_key:
+        return ContentSafetyService(
             endpoint=settings.content_safety_endpoint,
             api_key=settings.content_safety_api_key,
         )
-    return _content_safety
+    return None
 
 
-# Content Understanding service — initialized if endpoint is configured
-_content_understanding: Optional[ContentUnderstandingService] = None
-
-
+@lru_cache(maxsize=1)
 def _get_content_understanding() -> Optional[ContentUnderstandingService]:
-    global _content_understanding
-    if _content_understanding is None and settings.content_understanding_endpoint:
-        _content_understanding = ContentUnderstandingService(
+    if settings.content_understanding_endpoint:
+        return ContentUnderstandingService(
             endpoint=settings.content_understanding_endpoint,
         )
-    return _content_understanding
+    return None
 
 
-# Search service — Semantic Citation Layer
-_search_service: Optional[SearchService] = None
-
-
+@lru_cache(maxsize=1)
 def _get_search() -> Optional[SearchService]:
-    global _search_service
-    if _search_service is None and settings.search_endpoint and settings.search_api_key:
-        _search_service = SearchService(
+    if settings.search_endpoint and settings.search_api_key:
+        return SearchService(
             endpoint=settings.search_endpoint,
             api_key=settings.search_api_key,
             index_name=settings.search_index_name,
             embedding_endpoint=settings.azure_openai_endpoint or None,
             embedding_key=settings.azure_openai_api_key or None,
         )
-    return _search_service
+    return None
 
 
 async def _verify_candidate(candidate: ExperimentCandidate) -> None:
@@ -338,34 +328,36 @@ async def compile_experiment(request: CompileRequest):
     planner = DOEPlanner(ps)
     candidates = planner.compile()
 
-    # Phase 4a: Lean verification (async, non-blocking)
+    # Phase 4a: Lean verification (parallel across candidates)
     if settings.lean_service_url:
-        for candidate in candidates:
-            await _verify_candidate(candidate)
+        await asyncio.gather(*[_verify_candidate(c) for c in candidates])
 
-    # Phase 4b: Critic Agent reviews each candidate
+    # Phase 4b: Critic Agent reviews each candidate (parallel)
     critic = CriticAgent()
-    for candidate in candidates:
-        try:
-            await critic.critique(ps, candidate)
-        except Exception:
-            # Offline fallback if Azure OpenAI is unavailable
-            critic.critique_offline(ps, candidate)
 
-    # Phase 5: Explainer Agent generates decision cards
+    async def _critique_one(c: ExperimentCandidate) -> None:
+        try:
+            await critic.critique(ps, c)
+        except Exception:
+            critic.critique_offline(ps, c)
+
+    await asyncio.gather(*[_critique_one(c) for c in candidates])
+
+    # Phase 5: Explainer Agent generates decision cards (parallel)
     search_svc = _get_search()
     explainer = ExplainerAgent()
-    for candidate in candidates:
-        # Query Semantic Citation Layer for grounding
+
+    async def _explain_one(c: ExperimentCandidate) -> None:
         grounding = []
         if search_svc:
-            query = f"{ps.objective} {candidate.justification}"
+            query = f"{ps.objective} {c.justification}"
             grounding = await search_svc.search(query=query, top=5)
-
         try:
-            await explainer.explain(ps, candidate, grounding)
+            await explainer.explain(ps, c, grounding)
         except Exception:
-            explainer.explain_offline(ps, candidate, grounding)
+            explainer.explain_offline(ps, c, grounding)
+
+    await asyncio.gather(*[_explain_one(c) for c in candidates])
 
     # Index into Semantic Citation Layer
     if search_svc:
@@ -377,7 +369,7 @@ async def compile_experiment(request: CompileRequest):
                     request.session_id, candidate.decision_card,
                 )
 
-    ps.updated_at = datetime.utcnow()
+    ps.updated_at = datetime.now(timezone.utc)
     await _save_session(ps)
 
     return CompileResponse(
@@ -458,7 +450,7 @@ async def add_constraint(session_id: str, constraint: Constraint):
     else:
         candidates = []
 
-    ps.updated_at = datetime.utcnow()
+    ps.updated_at = datetime.now(timezone.utc)
     await _save_session(ps)
 
     return CompileResponse(

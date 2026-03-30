@@ -1,7 +1,18 @@
 import type { DecisionCard } from '../types'
 
-function highlightCitations(text: string) {
-  return text.replace(/\[(\d+)\]/g, '<span class="text-blue-600 font-medium">[$1]</span>')
+function CitationText({ text }: { text: string }) {
+  const parts = text.split(/(\[\d+\])/g)
+  return (
+    <>
+      {parts.map((part, i) =>
+        /^\[\d+\]$/.test(part) ? (
+          <span key={i} className="text-blue-600 font-medium">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
 }
 
 export default function DecisionCardView({ card }: { card: DecisionCard }) {
@@ -16,21 +27,16 @@ export default function DecisionCardView({ card }: { card: DecisionCard }) {
 
       <div>
         <span className="text-xs font-medium text-gray-500 uppercase">Why</span>
-        <p
-          className="text-sm mt-0.5"
-          dangerouslySetInnerHTML={{ __html: highlightCitations(card.why) }}
-        />
+        <p className="text-sm mt-0.5"><CitationText text={card.why} /></p>
       </div>
 
       <div>
         <span className="text-xs font-medium text-gray-500 uppercase">Evidence Used</span>
         <ul className="text-sm mt-0.5 space-y-0.5">
           {card.evidence_used.map((e, i) => (
-            <li
-              key={i}
-              className="text-gray-700"
-              dangerouslySetInnerHTML={{ __html: highlightCitations(e) }}
-            />
+            <li key={i} className="text-gray-700">
+              <CitationText text={e} />
+            </li>
           ))}
         </ul>
       </div>

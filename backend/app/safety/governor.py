@@ -47,6 +47,16 @@ DISALLOWED_ADVISORY_PATTERNS = [
     r"\b(is\s+it\s+safe\s+to|can\s+I\s+safely)\b",
 ]
 
+# Precompile all pattern lists for performance
+_COMPILED_CLINICAL = [re.compile(p) for p in CLINICAL_PATTERNS]
+_COMPILED_BIO_HAZARD = [re.compile(p) for p in BIO_HAZARD_PATTERNS]
+_COMPILED_DISALLOWED = [re.compile(p) for p in DISALLOWED_ADVISORY_PATTERNS]
+_COMPILED_MAP = {
+    id(CLINICAL_PATTERNS): _COMPILED_CLINICAL,
+    id(BIO_HAZARD_PATTERNS): _COMPILED_BIO_HAZARD,
+    id(DISALLOWED_ADVISORY_PATTERNS): _COMPILED_DISALLOWED,
+}
+
 
 class SafetyGovernor:
     """
@@ -174,13 +184,18 @@ class SafetyGovernor:
                     f"Excluding from experimental space — system will not "
                     f"recommend clinical interventions."
                 )
-                # DEGRADE: add constraint to exclude this factor
-                self.ps.constraints.append(Constraint(
-                    description=f"Safety exclusion: factor '{factor.name}' is in clinical domain",
-                    constraint_type="safety_exclusion",
-                    excluded_factor_id=factor.id,
-                    is_safety_constraint=True,
-                ))
+                # DEGRADE: add constraint if not already present
+                already_exists = any(
+                    c.is_safety_constraint and c.excluded_factor_id == factor.id
+                    for c in self.ps.constraints
+                )
+                if not already_exists:
+                    self.ps.constraints.append(Constraint(
+                        description=f"Safety exclusion: factor '{factor.name}' is in clinical domain",
+                        constraint_type="safety_exclusion",
+                        excluded_factor_id=factor.id,
+                        is_safety_constraint=True,
+                    ))
                 verdict = SafetyVerdict.DEGRADE
 
             if self._matches_patterns(factor_text, BIO_HAZARD_PATTERNS):
@@ -262,6 +277,9 @@ class SafetyGovernor:
     def _matches_patterns(text: str, patterns: list[str]) -> bool:
         """Check if text matches any of the given regex patterns."""
         text_lower = text.lower()
+        compiled = _COMPILED_MAP.get(id(patterns))
+        if compiled:
+            return any(p.search(text_lower) for p in compiled)
         return any(re.search(p, text_lower) for p in patterns)
 
     def get_degradation_report(self) -> dict:

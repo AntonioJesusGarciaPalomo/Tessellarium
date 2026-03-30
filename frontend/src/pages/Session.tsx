@@ -53,8 +53,8 @@ export default function Session() {
       const constraint: Constraint = {
         description: conDesc,
         constraint_type: conType,
-        excluded_factor_id: conFactorId || undefined,
-        excluded_level_id: conLevelId || undefined,
+        excluded_factor_id: conFactorId || null,
+        excluded_level_id: conLevelId || null,
       }
       const result = await addConstraint(id, constraint)
       setPs(result.problem_space)
@@ -176,6 +176,21 @@ export default function Session() {
           {safetyNotes.map((n, i) => (
             <p key={i} className="text-sm">{n}</p>
           ))}
+        </div>
+      )}
+
+      {safetyVerdict === 'block' && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">
+            Compilation Blocked
+          </h2>
+          <p className="text-sm text-red-700">
+            This problem space contains content that requires mandatory human review.
+            Tessellarium cannot compile experimental designs for clinical or therapeutic advisory queries.
+          </p>
+          <p className="text-sm text-gray-600 mt-2">
+            Modify the problem space to remove clinical advisory language, then recompile.
+          </p>
         </div>
       )}
 

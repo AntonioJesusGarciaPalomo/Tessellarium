@@ -185,6 +185,12 @@ resource tessLean 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-tess-lean'
   location: location
   tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appIdentityId}': {}
+    }
+  }
   properties: {
     managedEnvironmentId: env.id
     workloadProfileName: 'Dedicated-D4'

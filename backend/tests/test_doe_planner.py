@@ -243,10 +243,10 @@ def test_doe_compilation():
         if candidate.constraint_costs:
             print(f"\n   ⚠️  Constraint costs:")
             for cost in candidate.constraint_costs:
-                print(f"      {cost['constraint_description']}")
-                for ap in cost.get('affected_hypothesis_pairs', []):
-                    print(f"         {ap['pair']}: lost {ap['excluded_runs']}/{ap['total_discriminating']} "
-                          f"discriminating runs ({ap['lost_fraction']*100:.1f}% lost)")
+                print(f"      {cost.constraint_description}")
+                for ap in cost.affected_hypothesis_pairs:
+                    print(f"         {ap.pair}: lost {ap.excluded_runs}/{ap.total_discriminating} "
+                          f"discriminating runs ({ap.lost_fraction*100:.1f}% lost)")
 
     # Phase 6: Test safety block
     print("\n" + "=" * 70)

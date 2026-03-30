@@ -61,7 +61,7 @@ def _make_ps(**kwargs) -> ProblemSpace:
 
 
 def _make_agent() -> CriticAgent:
-    return CriticAgent.__new__(CriticAgent)
+    return CriticAgent.create_offline()
 
 
 def test_critique_has_all_sections():

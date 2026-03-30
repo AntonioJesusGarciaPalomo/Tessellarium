@@ -118,6 +118,15 @@ class CriticAgent(AgentBase):
         candidate.critique = critique_text
         return critique_text
 
+    @classmethod
+    def create_offline(cls) -> "CriticAgent":
+        """Create an instance for offline use (no LLM credentials needed)."""
+        instance = cls.__new__(cls)
+        instance.model = "offline"
+        instance._foundry = None
+        instance._direct_client = None
+        return instance
+
     def critique_offline(
         self,
         problem_space: ProblemSpace,

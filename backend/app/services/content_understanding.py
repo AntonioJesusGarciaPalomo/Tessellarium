@@ -138,7 +138,7 @@ class ContentUnderstandingService:
         logger.warning("Content Understanding polling timed out")
         return None
 
-    def _parse_result(self, raw_result: dict) -> str:
+    def _parse_result(self, raw_result: dict, _depth: int = 0) -> str:
         """
         Convert Content Understanding output into clean structured text
         for the Parser Agent.
@@ -217,7 +217,8 @@ class ContentUnderstandingService:
         if len(sections) <= 1:
             analyze_result = raw_result.get("analyzeResult", {})
             if analyze_result:
-                return self._parse_result(analyze_result)
+                if _depth < 3:
+                    return self._parse_result(analyze_result, _depth=_depth + 1)
 
             # Last resort: dump readable content
             content = raw_result.get("content", "")

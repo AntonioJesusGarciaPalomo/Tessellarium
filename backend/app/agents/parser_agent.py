@@ -233,6 +233,14 @@ class ParserAgent(AgentBase):
         Convert the LLM's JSON output to a proper ProblemSpace with
         consistent IDs and cross-references.
         """
+        if not isinstance(parsed, dict):
+            return ProblemSpace(objective="Failed to parse input", max_runs_budget=max_runs_budget)
+
+        # Ensure all expected fields are lists
+        for field in ("factors", "hypotheses", "evidence", "constraints", "completed_runs"):
+            if not isinstance(parsed.get(field), list):
+                parsed[field] = []
+
         # Build factors with stable IDs
         factors = []
         factor_name_to_id = {}

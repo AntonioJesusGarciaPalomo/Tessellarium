@@ -98,14 +98,36 @@ resource dnsZoneLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@202
   }
 ]
 
+// ─── Subnet References (by name, not index) ────────────────────────
+
+resource snetAppAca 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: vnet
+  name: 'snet-app-aca'
+}
+
+resource snetAppPe 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: vnet
+  name: 'snet-app-pe'
+}
+
+resource snetFoundryAgents 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: vnet
+  name: 'snet-foundry-agents'
+}
+
+resource snetFoundryPe 'Microsoft.Network/virtualNetworks/subnets@2024-01-01' existing = {
+  parent: vnet
+  name: 'snet-foundry-pe'
+}
+
 // ─── Outputs ────────────────────────────────────────────────────────
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
-output snetAppAcaId string = vnet.properties.subnets[0].id
-output snetAppPeId string = vnet.properties.subnets[1].id
-output snetFoundryAgentsId string = vnet.properties.subnets[2].id
-output snetFoundryPeId string = vnet.properties.subnets[3].id
+output snetAppAcaId string = snetAppAca.id
+output snetAppPeId string = snetAppPe.id
+output snetFoundryAgentsId string = snetFoundryAgents.id
+output snetFoundryPeId string = snetFoundryPe.id
 
 output dnsZoneIds object = {
   cosmos: dnsZones[0].id

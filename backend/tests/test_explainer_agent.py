@@ -20,7 +20,7 @@ from app.agents.explainer_agent import ExplainerAgent
 
 
 def _make_agent() -> ExplainerAgent:
-    return ExplainerAgent.__new__(ExplainerAgent)
+    return ExplainerAgent.create_offline()
 
 
 def _make_ps(**kwargs) -> ProblemSpace:

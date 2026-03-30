@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 
@@ -154,6 +154,19 @@ class DecisionCard(BaseModel):
     what_would_change_mind: str
 
 
+class AffectedPair(BaseModel):
+    pair: str
+    excluded_runs: int
+    total_discriminating: int
+    lost_fraction: float
+
+
+class ConstraintCost(BaseModel):
+    constraint_id: str
+    constraint_description: str
+    affected_hypothesis_pairs: list[AffectedPair] = []
+
+
 class ExperimentCandidate(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     strategy: CandidateStrategy
@@ -161,7 +174,7 @@ class ExperimentCandidate(BaseModel):
     discrimination_pairs: list[DiscriminationPair]
     total_discrimination_score: float
     justification: str
-    constraint_costs: list[dict] = []
+    constraint_costs: list[ConstraintCost] = []
     critique: Optional[str] = None
     decision_card: Optional[DecisionCard] = None
 
@@ -185,8 +198,8 @@ class ProblemSpace(BaseModel):
     THE central artifact of Tessellarium.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Extracted from protocol
     objective: str = ""

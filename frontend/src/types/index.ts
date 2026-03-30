@@ -46,8 +46,8 @@ export interface Constraint {
   id?: string
   description: string
   constraint_type: string
-  excluded_factor_id?: string
-  excluded_level_id?: string
+  excluded_factor_id?: string | null
+  excluded_level_id?: string | null
   excluded_combinations?: Record<string, string>[]
   is_safety_constraint?: boolean
 }
@@ -84,6 +84,19 @@ export interface DecisionCard {
   what_would_change_mind: string
 }
 
+export interface AffectedPair {
+  pair: string
+  excluded_runs: number
+  total_discriminating: number
+  lost_fraction: number
+}
+
+export interface ConstraintCost {
+  constraint_id: string
+  constraint_description: string
+  affected_hypothesis_pairs: AffectedPair[]
+}
+
 export interface ExperimentCandidate {
   id: string
   strategy: CandidateStrategy
@@ -91,7 +104,7 @@ export interface ExperimentCandidate {
   discrimination_pairs: DiscriminationPair[]
   total_discrimination_score: number
   justification: string
-  constraint_costs: Record<string, any>[]
+  constraint_costs: ConstraintCost[]
   critique?: string
   decision_card?: DecisionCard
 }

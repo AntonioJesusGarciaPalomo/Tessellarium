@@ -7,6 +7,7 @@ The Explainer Agent queries this to ground decision cards with citations.
 """
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -395,7 +396,7 @@ class SearchService:
         if candidate.constraint_costs:
             cost_parts = []
             for cost in candidate.constraint_costs:
-                cost_parts.append(cost.get("constraint_description", ""))
+                cost_parts.append(cost.constraint_description)
             cost_text = " Constraint costs: " + "; ".join(cost_parts)
 
         return [{
@@ -434,8 +435,10 @@ class SearchService:
             f"Would change mind: {card.what_would_change_mind}"
         )
 
+        content_hash = hashlib.sha256(content.encode()).hexdigest()[:8]
+
         return [{
-            "id": f"{session_id}-decision-{uuid.uuid4().hex[:8]}",
+            "id": f"{session_id}-decision-{content_hash}",
             "session_id": session_id,
             "source_type": "decision_card",
             "artifact_type": "decision_card",

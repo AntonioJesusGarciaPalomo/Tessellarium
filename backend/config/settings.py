@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "Tessellarium"
     app_version: str = "0.2.0"
     debug: bool = False
+    cors_origins: str = "*"
 
     # ─── Azure Foundry ───────────────────────────────────────────────────
     azure_foundry_endpoint: str = ""

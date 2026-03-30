@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.models.problem_space import (
     ProblemSpace, Factor, Level, Hypothesis, Evidence,
     Constraint, ExperimentalRun, ExperimentCandidate,
-    DesignMatrix, DiscriminationPair, DecisionCard,
+    DesignMatrix, DiscriminationPair, DecisionCard, ConstraintCost,
     EpistemicState, OperativeState, CandidateStrategy, DesignFamily,
 )
 from app.services.search_service import SearchService
@@ -120,11 +120,11 @@ def _make_candidate() -> ExperimentCandidate:
         total_discrimination_score=0.75,
         justification="Selected 4 runs optimized for maximum discrimination across 1 hypothesis pair.",
         constraint_costs=[
-            {
-                "constraint_id": "C1",
-                "constraint_description": "Lot C is exhausted",
-                "affected_hypothesis_pairs": [],
-            },
+            ConstraintCost(
+                constraint_id="C1",
+                constraint_description="Lot C is exhausted",
+                affected_hypothesis_pairs=[],
+            ),
         ],
     )
 

@@ -95,6 +95,15 @@ class ExplainerAgent(AgentBase):
         candidate.decision_card = card
         return card
 
+    @classmethod
+    def create_offline(cls) -> "ExplainerAgent":
+        """Create an instance for offline use (no LLM credentials needed)."""
+        instance = cls.__new__(cls)
+        instance.model = "offline"
+        instance._foundry = None
+        instance._direct_client = None
+        return instance
+
     def explain_offline(
         self,
         problem_space: ProblemSpace,
@@ -142,7 +151,7 @@ class ExplainerAgent(AgentBase):
         if candidate.constraint_costs:
             cost_parts = []
             for cost in candidate.constraint_costs:
-                desc = cost.get("constraint_description", "")
+                desc = cost.constraint_description
                 if desc:
                     cost_parts.append(desc)
             if cost_parts:
