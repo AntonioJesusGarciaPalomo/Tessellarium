@@ -22,6 +22,7 @@ from app.doe_planner.planner import DOEPlanner
 from app.safety.governor import SafetyGovernor
 from app.agents.parser_agent import ParserAgent
 from app.agents.critic_agent import CriticAgent
+from app.agents.explainer_agent import ExplainerAgent
 from app.services.cosmos_store import CosmosStore
 from app.services.content_safety_service import ContentSafetyService
 from app.services.content_understanding import (
@@ -303,14 +304,30 @@ async def compile_experiment(request: CompileRequest):
             # Offline fallback if Azure OpenAI is unavailable
             critic.critique_offline(ps, candidate)
 
-    # TODO: Phase 5 - Explainer Agent generates decision cards
+    # Phase 5: Explainer Agent generates decision cards
+    search_svc = _get_search()
+    explainer = ExplainerAgent()
+    for candidate in candidates:
+        # Query Semantic Citation Layer for grounding
+        grounding = []
+        if search_svc:
+            query = f"{ps.objective} {candidate.justification}"
+            grounding = await search_svc.search(query=query, top=5)
+
+        try:
+            await explainer.explain(ps, candidate, grounding)
+        except Exception:
+            explainer.explain_offline(ps, candidate, grounding)
 
     # Index into Semantic Citation Layer
-    search_svc = _get_search()
     if search_svc:
         await search_svc.index_problem_space(ps)
         for candidate in candidates:
             await search_svc.index_compilation(ps, candidate)
+            if candidate.decision_card:
+                await search_svc.index_decision_card(
+                    request.session_id, candidate.decision_card,
+                )
 
     await _save_session(ps)
 
