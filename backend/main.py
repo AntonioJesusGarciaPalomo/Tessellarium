@@ -22,6 +22,7 @@ from app.doe_planner.planner import DOEPlanner
 from app.safety.governor import SafetyGovernor
 from app.agents.parser_agent import ParserAgent
 from app.services.cosmos_store import CosmosStore
+from app.services.content_safety_service import ContentSafetyService
 
 app = FastAPI(
     title=settings.app_name,
@@ -67,6 +68,20 @@ async def _load_session(session_id: str) -> Optional[ProblemSpace]:
     if store:
         return await store.get_session(session_id)
     return _memory_sessions.get(session_id)
+
+
+# Content Safety service — initialized if endpoint is configured
+_content_safety: Optional[ContentSafetyService] = None
+
+
+def _get_content_safety() -> Optional[ContentSafetyService]:
+    global _content_safety
+    if _content_safety is None and settings.content_safety_endpoint and settings.content_safety_api_key:
+        _content_safety = ContentSafetyService(
+            endpoint=settings.content_safety_endpoint,
+            api_key=settings.content_safety_api_key,
+        )
+    return _content_safety
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
@@ -189,8 +204,8 @@ async def compile_experiment(request: CompileRequest):
         ps.max_runs_budget = request.updated_budget
 
     # Phase 3: Safety Gate
-    governor = SafetyGovernor(ps)
-    verdict = governor.evaluate()
+    governor = SafetyGovernor(ps, content_safety_service=_get_content_safety())
+    verdict = await governor.evaluate_async()
 
     if verdict == SafetyVerdict.BLOCK:
         # Return evidence summary only
@@ -245,8 +260,8 @@ async def add_constraint(session_id: str, constraint: Constraint):
     ps.constraints.append(constraint)
 
     # Recompile
-    governor = SafetyGovernor(ps)
-    verdict = governor.evaluate()
+    governor = SafetyGovernor(ps, content_safety_service=_get_content_safety())
+    verdict = await governor.evaluate_async()
 
     if verdict != SafetyVerdict.BLOCK:
         planner = DOEPlanner(ps)
