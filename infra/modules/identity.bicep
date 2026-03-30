@@ -11,6 +11,8 @@ param tags object = {}
 param acrId string = ''
 param cosmosAppAccountId string = ''
 param cosmosAgentAccountId string = ''
+param cosmosAppAccountName string = ''
+param cosmosAgentAccountName string = ''
 param storageAppAccountId string = ''
 param storageAgentAccountId string = ''
 param openaiAccountId string = ''
@@ -128,6 +130,38 @@ resource kvAgentAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUser)
     principalId: foundryIdentity.properties.principalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── Cosmos DB Data-Plane RBAC ───────────────────────────────────────
+// Cosmos uses its own sqlRoleAssignments, not Microsoft.Authorization.
+// Built-in role: 00000000-0000-0000-0000-000000000002 = Cosmos DB Built-in Data Contributor
+
+resource cosmosAppAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = if (cosmosAppAccountName != '') {
+  name: cosmosAppAccountName
+}
+
+resource cosmosAppRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = if (cosmosAppAccountName != '') {
+  parent: cosmosAppAccount
+  name: guid(cosmosAppAccountId, appIdentity.id, cosmosDataContributor)
+  properties: {
+    roleDefinitionId: '${cosmosAppAccountId}/sqlRoleDefinitions/${cosmosDataContributor}'
+    principalId: appIdentity.properties.principalId
+    scope: cosmosAppAccountId
+  }
+}
+
+resource cosmosAgentAccount 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = if (cosmosAgentAccountName != '') {
+  name: cosmosAgentAccountName
+}
+
+resource cosmosAgentRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = if (cosmosAgentAccountName != '') {
+  parent: cosmosAgentAccount
+  name: guid(cosmosAgentAccountId, foundryIdentity.id, cosmosDataContributor)
+  properties: {
+    roleDefinitionId: '${cosmosAgentAccountId}/sqlRoleDefinitions/${cosmosDataContributor}'
+    principalId: foundryIdentity.properties.principalId
+    scope: cosmosAgentAccountId
   }
 }
 

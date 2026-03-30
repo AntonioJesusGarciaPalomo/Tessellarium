@@ -41,16 +41,6 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
-// ─── Container Registry ─────────────────────────────────────────────
-
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
-  name: replace('cr${name}', '-', '')
-  location: location
-  tags: tags
-  sku: { name: 'Basic' }
-  properties: { adminUserEnabled: false }
-}
-
 // ─── Container Apps Environment (Workload Profiles) ─────────────────
 
 resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
@@ -237,7 +227,4 @@ resource tessLean 'Microsoft.App/containerApps@2024-03-01' = {
 output apiUrl string = 'https://${tessApi.properties.configuration.ingress.fqdn}'
 output apiFqdn string = tessApi.properties.configuration.ingress.fqdn
 output leanUrl string = 'https://${tessLean.properties.configuration.ingress.fqdn}'
-output registryLoginServer string = containerRegistry.properties.loginServer
-output registryName string = containerRegistry.name
-output registryId string = containerRegistry.id
 output environmentDefaultDomain string = env.properties.defaultDomain

@@ -128,6 +128,20 @@ module agentStores './modules/agent-stores.bicep' = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// CONTAINER REGISTRY (separate to break circular dependency)
+// ═══════════════════════════════════════════════════════════════════════
+
+module acr './modules/acr.bicep' = {
+  name: 'acr'
+  scope: rg
+  params: {
+    name: '${abbrs.containerRegistry}${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // CONTAINER APPS
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -140,7 +154,7 @@ module containerApps './modules/container-apps.bicep' = {
     tags: tags
     subnetId: network.outputs.snetAppAcaId
     appIdentityId: identity.outputs.appIdentityId
-    acrLoginServer: containerApps.outputs.registryLoginServer
+    acrLoginServer: acr.outputs.loginServer
     openaiEndpoint: openai.outputs.endpoint
     contentSafetyEndpoint: contentSafety.outputs.endpoint
     searchEndpoint: search.outputs.endpoint
@@ -182,9 +196,11 @@ module identity './modules/identity.bicep' = {
     name: resourceToken
     location: location
     tags: tags
-    acrId: containerApps.outputs.registryId
+    acrId: acr.outputs.id
     cosmosAppAccountId: cosmos.outputs.id
+    cosmosAppAccountName: cosmos.outputs.name
     cosmosAgentAccountId: agentStores.outputs.cosmosId
+    cosmosAgentAccountName: agentStores.outputs.cosmosName
     storageAppAccountId: storage.outputs.id
     storageAgentAccountId: agentStores.outputs.storageId
     openaiAccountId: openai.outputs.id
@@ -373,5 +389,5 @@ output AZURE_FOUNDRY_PROJECT string = foundry.outputs.projectName
 output BACKEND_URL string = containerApps.outputs.apiUrl
 output FRONTEND_URL string = staticWebApp.outputs.url
 output FRONT_DOOR_URL string = frontDoor.outputs.frontDoorFqdn
-output ACR_LOGIN_SERVER string = containerApps.outputs.registryLoginServer
+output ACR_LOGIN_SERVER string = acr.outputs.loginServer
 output APP_IDENTITY_CLIENT_ID string = identity.outputs.appIdentityClientId
