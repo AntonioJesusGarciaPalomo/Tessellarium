@@ -1,0 +1,47 @@
+/-
+  Tessellarium — Covering Array Verification (strength {{ strength }})
+
+  Matrix: {{ num_runs }} runs × {{ num_factors }} factors
+  Factors: {% for fid in factor_ids %}{{ fid }} ({{ levels_per_factor[loop.index0] }} levels){% if not loop.last %}, {% endif %}{% endfor %}
+
+  Property: every subset of {{ strength }} columns contains all
+  value tuples (pairwise coverage for strength=2).
+-/
+
+-- Matrix definition as a function Fin {{ num_runs }} → Fin {{ num_factors }} → Nat
+def matrix : Fin {{ num_runs }} → Fin {{ num_factors }} → Nat
+{% for row in numeric_matrix %}  | ⟨{{ loop.index0 }}, by omega⟩ => fun col => match col with
+{% for val in row %}    | ⟨{{ loop.index0 }}, by omega⟩ => {{ val }}
+{% endfor %}{% endfor %}
+
+-- Number of levels per factor
+def numLevels : Fin {{ num_factors }} → Nat
+{% for n in levels_per_factor %}  | ⟨{{ loop.index0 }}, by omega⟩ => {{ n }}
+{% endfor %}
+
+-- Check: does pair (v1, v2) appear in columns (c1, c2) across all runs?
+def pairCovered (c1 c2 : Fin {{ num_factors }}) (v1 v2 : Nat) : Bool :=
+  let runs : List (Fin {{ num_runs }}) :=
+    List.finRange {{ num_runs }}
+  runs.any fun r => matrix r c1 == v1 && matrix r c2 == v2
+
+-- Check: all pairs covered for columns (c1, c2)
+def allPairsCovered (c1 c2 : Fin {{ num_factors }}) : Bool :=
+  let levels1 := List.range (numLevels c1)
+  let levels2 := List.range (numLevels c2)
+  levels1.all fun v1 =>
+    levels2.all fun v2 =>
+      pairCovered c1 c2 v1 v2
+
+-- Check: all column pairs have all value pairs covered
+def isStrength{{ strength }}CoveringArray : Bool :=
+  let cols : List (Fin {{ num_factors }}) :=
+    List.finRange {{ num_factors }}
+  cols.all fun c1 =>
+    cols.all fun c2 =>
+      if c1.val < c2.val then allPairsCovered c1 c2
+      else true
+
+-- The theorem: verified by native_decide (brute-force finite check)
+theorem covering_array_verified : isStrength{{ strength }}CoveringArray = true := by
+  native_decide

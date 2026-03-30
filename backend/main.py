@@ -10,14 +10,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
+import logging
 import uuid
 import json
+
+import httpx
 
 from config.settings import settings
 from app.models.problem_space import (
     ProblemSpace, CompileRequest, CompileResponse,
     UploadResponse, SafetyVerdict, Constraint,
+    ExperimentCandidate, VerificationStatus,
 )
+
+logger = logging.getLogger(__name__)
 from app.doe_planner.planner import DOEPlanner
 from app.safety.governor import SafetyGovernor
 from app.agents.parser_agent import ParserAgent
@@ -118,6 +124,42 @@ def _get_search() -> Optional[SearchService]:
             embedding_key=settings.azure_openai_api_key or None,
         )
     return _search_service
+
+
+async def _verify_candidate(candidate: ExperimentCandidate) -> None:
+    """Call the Lean verification service for a candidate. Non-blocking."""
+    if not settings.lean_service_url:
+        return
+
+    try:
+        body = {
+            "design_matrix": candidate.design_matrix.rows,
+            "design_family": candidate.design_matrix.design_family.value,
+            "property_to_verify": "pairwise_coverage",
+            "strength": candidate.design_matrix.design_properties.get("strength", 2),
+            "timeout_seconds": settings.lean_timeout_seconds,
+        }
+        async with httpx.AsyncClient(
+            timeout=settings.lean_timeout_seconds + 5,
+        ) as client:
+            resp = await client.post(
+                f"{settings.lean_service_url}/verify", json=body,
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                candidate.design_matrix.verification_status = VerificationStatus(
+                    result["status"]
+                )
+                candidate.design_matrix.verification_details = result.get("details")
+            else:
+                candidate.design_matrix.verification_status = VerificationStatus.NOT_ATTEMPTED
+                candidate.design_matrix.verification_details = (
+                    f"Lean service returned {resp.status_code}"
+                )
+    except Exception as e:
+        logger.warning("Lean verification failed: %s", e)
+        candidate.design_matrix.verification_status = VerificationStatus.NOT_ATTEMPTED
+        candidate.design_matrix.verification_details = f"Service unreachable: {e}"
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
@@ -294,6 +336,11 @@ async def compile_experiment(request: CompileRequest):
     # Phase 4: DOE Compilation (deterministic — the heart)
     planner = DOEPlanner(ps)
     candidates = planner.compile()
+
+    # Phase 4a: Lean verification (async, non-blocking)
+    if settings.lean_service_url:
+        for candidate in candidates:
+            await _verify_candidate(candidate)
 
     # Phase 4b: Critic Agent reviews each candidate
     critic = CriticAgent()

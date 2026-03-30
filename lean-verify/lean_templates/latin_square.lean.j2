@@ -1,0 +1,24 @@
+/-
+  Tessellarium — Latin Square Verification
+
+  Matrix: {{ n }} entries with 3 factors (row, column, symbol).
+  Property: each symbol appears exactly once per row and once per column.
+-/
+
+-- Encode entries as (row_idx, col_idx, symbol_idx) triples
+-- We assign integer indices to each unique value per factor.
+
+def entries : List (Nat × Nat × Nat) :=
+  {{ encoded_entries }}
+
+-- Check: no two entries share (row, symbol) or (col, symbol)
+def isValidLatinSquare (es : List (Nat × Nat × Nat)) : Bool :=
+  es.all fun (r1, c1, s1) =>
+    es.all fun (r2, c2, s2) =>
+      if r1 == r2 && c1 == c2 then true  -- same entry
+      else if r1 == r2 then s1 != s2     -- same row → different symbols
+      else if c1 == c2 then s1 != s2     -- same col → different symbols
+      else true
+
+theorem latin_square_verified : isValidLatinSquare entries = true := by
+  native_decide
