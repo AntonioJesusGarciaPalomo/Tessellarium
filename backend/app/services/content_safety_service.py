@@ -5,6 +5,7 @@ Wraps the azure-ai-contentsafety SDK for text moderation and Prompt Shields.
 This is Layer 1-2 of the four-layer safety pipeline.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -65,7 +66,7 @@ class ContentSafetyService:
                     TextCategory.VIOLENCE,
                 ],
             )
-            response = self._client.analyze_text(request)
+            response = await asyncio.to_thread(self._client.analyze_text, request)
 
             results = {}
             max_severity = 0

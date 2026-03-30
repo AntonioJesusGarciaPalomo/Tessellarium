@@ -6,6 +6,7 @@ protocols, compilations, decision cards, literature claims, and evidence.
 The Explainer Agent queries this to ground decision cards with citations.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -140,7 +141,7 @@ class SearchService:
         )
 
         try:
-            self._index_client.create_or_update_index(index)
+            await asyncio.to_thread(self._index_client.create_or_update_index, index)
             logger.info("Search index '%s' created/updated.", self._index_name)
         except Exception as e:
             logger.warning("Failed to create/update index: %s", e)
@@ -192,15 +193,17 @@ class SearchService:
                         ),
                     ]
 
-            results = self._search_client.search(
-                search_text=query,
-                filter=filter_expr,
-                top=top,
-                vector_queries=vector_queries,
-                select=[
-                    "id", "content", "citation_text", "source_type",
-                    "confidence", "title", "session_id",
-                ],
+            results = await asyncio.to_thread(
+                lambda: list(self._search_client.search(
+                    search_text=query,
+                    filter=filter_expr,
+                    top=top,
+                    vector_queries=vector_queries,
+                    select=[
+                        "id", "content", "citation_text", "source_type",
+                        "confidence", "title", "session_id",
+                    ],
+                ))
             )
 
             hits = []
@@ -462,7 +465,7 @@ class SearchService:
                         doc["content_vector"] = embedding
 
         try:
-            self._search_client.upload_documents(documents=docs)
+            await asyncio.to_thread(self._search_client.upload_documents, docs)
             logger.info("Indexed %d documents.", len(docs))
         except Exception as e:
             logger.warning("Failed to index documents: %s", e)

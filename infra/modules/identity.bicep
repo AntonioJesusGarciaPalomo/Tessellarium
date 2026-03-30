@@ -111,6 +111,28 @@ resource storageAgentAssignment 'Microsoft.Authorization/roleAssignments@2022-04
   }
 }
 
+// ─── Search access ──────────────────────────────────────────────────
+
+resource searchAppAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (searchAppId != '') {
+  name: guid(searchAppId, appIdentity.id, searchIndexDataContributor)
+  scope: resourceGroup()
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributor)
+    principalId: appIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource searchAgentAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (searchAgentId != '') {
+  name: guid(searchAgentId, foundryIdentity.id, searchIndexDataContributor)
+  scope: resourceGroup()
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributor)
+    principalId: foundryIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ─── Key Vault access ───────────────────────────────────────────────
 
 resource kvAppAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (keyVaultAppId != '') {

@@ -55,4 +55,3 @@ resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-
 }
 
 output id string = privateEndpoint.id
-output ipAddress string = privateEndpoint.properties.customDnsConfigs[0].ipAddresses[0]

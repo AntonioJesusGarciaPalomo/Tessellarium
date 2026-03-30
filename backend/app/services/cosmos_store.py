@@ -1,5 +1,6 @@
 """Tessellarium — Azure Cosmos DB storage adapter for experiment data."""
 
+import asyncio
 from typing import Optional
 from datetime import datetime
 
@@ -13,6 +14,9 @@ class CosmosStore:
     """
     Persists ProblemSpace sessions to Azure Cosmos DB for NoSQL.
     Each session is a single JSON document keyed by ProblemSpace.id.
+
+    The azure-cosmos SDK is synchronous; all calls are wrapped in
+    asyncio.to_thread() to avoid blocking the event loop.
     """
 
     def __init__(
@@ -33,12 +37,13 @@ class CosmosStore:
         """Upsert a ProblemSpace as a JSON document."""
         doc = problem_space.model_dump(mode="json")
         doc["id"] = problem_space.id
-        self._container.upsert_item(doc)
+        await asyncio.to_thread(self._container.upsert_item, doc)
 
     async def get_session(self, session_id: str) -> Optional[ProblemSpace]:
         """Read a session by id. Returns None if not found."""
         try:
-            doc = self._container.read_item(
+            doc = await asyncio.to_thread(
+                self._container.read_item,
                 item=session_id,
                 partition_key=session_id,
             )
@@ -49,7 +54,8 @@ class CosmosStore:
     async def delete_session(self, session_id: str) -> None:
         """Delete a session by id. No-op if not found."""
         try:
-            self._container.delete_item(
+            await asyncio.to_thread(
+                self._container.delete_item,
                 item=session_id,
                 partition_key=session_id,
             )
@@ -62,11 +68,13 @@ class CosmosStore:
             "SELECT TOP @limit c.id, c.objective, c.created_at, c.updated_at "
             "FROM c ORDER BY c.updated_at DESC"
         )
-        items = list(
-            self._container.query_items(
-                query=query,
-                parameters=[{"name": "@limit", "value": limit}],
-                enable_cross_partition_query=True,
+        items = await asyncio.to_thread(
+            lambda: list(
+                self._container.query_items(
+                    query=query,
+                    parameters=[{"name": "@limit", "value": limit}],
+                    enable_cross_partition_query=True,
+                )
             )
         )
         return items
