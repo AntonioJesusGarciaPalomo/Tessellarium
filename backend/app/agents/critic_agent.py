@@ -11,11 +11,11 @@ This is a pure reasoning agent — no tools, no retrieval.
 import json
 import os
 from typing import Optional
-from openai import AzureOpenAI
 
 from app.models.problem_space import (
     ProblemSpace, ExperimentCandidate,
 )
+from app.agents.foundry_client import AgentBase, get_foundry_client
 
 
 CRITIC_SYSTEM_PROMPT = """You are the Critic Agent of Tessellarium, a decisive experiment compiler.
@@ -55,10 +55,12 @@ RULES:
 - Be honest. If the design is solid, say so. Do not invent problems."""
 
 
-class CriticAgent:
+class CriticAgent(AgentBase):
     """
     Reviews DOE Planner candidates for weaknesses.
     Uses GPT-4o-mini for analytical critique. No tools.
+
+    Foundry agent name: tessellarium-critic
     """
 
     def __init__(
@@ -67,11 +69,13 @@ class CriticAgent:
         api_key: Optional[str] = None,
         api_version: str = "2025-12-01-preview",
         model: str = "gpt-4o-mini",
+        foundry_client=None,
     ):
-        self.model = model
-        self.client = AzureOpenAI(
-            azure_endpoint=azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-            api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY", ""),
+        super().__init__(
+            model=model,
+            foundry_client=foundry_client or get_foundry_client(),
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
             api_version=api_version,
         )
 
@@ -86,17 +90,13 @@ class CriticAgent:
         """
         user_message = self._build_user_message(problem_space, candidate)
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
+        critique_text = await self._call_llm(
+            system_prompt=CRITIC_SYSTEM_PROMPT,
+            user_message=user_message,
             temperature=0.3,
             max_tokens=1500,
         )
 
-        critique_text = response.choices[0].message.content
         candidate.critique = critique_text
         return critique_text
 
@@ -105,20 +105,16 @@ class CriticAgent:
         problem_space: ProblemSpace,
         candidate: ExperimentCandidate,
     ) -> str:
-        """Synchronous version for testing."""
+        """Synchronous version for testing (direct mode only)."""
         user_message = self._build_user_message(problem_space, candidate)
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
+        critique_text = self._call_llm_sync(
+            system_prompt=CRITIC_SYSTEM_PROMPT,
+            user_message=user_message,
             temperature=0.3,
             max_tokens=1500,
         )
 
-        critique_text = response.choices[0].message.content
         candidate.critique = critique_text
         return critique_text
 

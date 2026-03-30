@@ -12,12 +12,12 @@ The Parser Agent's sole responsibility is: unstructured → structured.
 import json
 import os
 from typing import Optional
-from openai import AzureOpenAI
 
 from app.models.problem_space import (
     ProblemSpace, Factor, Level, Hypothesis, Evidence,
     ExperimentalRun, Constraint, EpistemicState, OperativeState,
 )
+from app.agents.foundry_client import AgentBase, get_foundry_client
 
 
 PARSER_SYSTEM_PROMPT = """You are the Parser Agent of Tessellarium, a decisive experiment compiler.
@@ -92,10 +92,12 @@ RULES:
 12. Return ONLY the JSON object. No explanation, no markdown, no commentary."""
 
 
-class ParserAgent:
+class ParserAgent(AgentBase):
     """
     Structures raw experimental input into a ProblemSpace.
     Uses Azure OpenAI GPT-4o for interpretation.
+
+    Foundry agent name: tessellarium-parser
     """
 
     def __init__(
@@ -104,11 +106,13 @@ class ParserAgent:
         api_key: Optional[str] = None,
         api_version: str = "2025-12-01-preview",
         model: str = "gpt-4o",
+        foundry_client=None,
     ):
-        self.model = model
-        self.client = AzureOpenAI(
-            azure_endpoint=azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-            api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY", ""),
+        super().__init__(
+            model=model,
+            foundry_client=foundry_client or get_foundry_client(),
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
             api_version=api_version,
         )
 
@@ -139,22 +143,16 @@ class ParserAgent:
             user_context, max_runs_budget,
         )
 
-        # Call GPT-4o
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": PARSER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.1,  # Low temperature for structured extraction
+        # Call GPT-4o (via Foundry or direct)
+        raw_json = await self._call_llm(
+            system_prompt=PARSER_SYSTEM_PROMPT,
+            user_message=user_message,
+            temperature=0.1,
             max_tokens=4000,
             response_format={"type": "json_object"},
         )
 
-        raw_json = response.choices[0].message.content
         parsed = json.loads(raw_json)
-
-        # Convert parsed JSON to ProblemSpace with proper IDs
         problem_space = self._build_problem_space(parsed, max_runs_budget)
 
         return problem_space
@@ -167,26 +165,21 @@ class ParserAgent:
         user_context: Optional[str] = None,
         max_runs_budget: Optional[int] = None,
     ) -> ProblemSpace:
-        """Synchronous version for testing."""
+        """Synchronous version for testing (direct mode only)."""
         user_message = self._build_user_message(
             protocol_text, csv_analysis, image_observations,
             user_context, max_runs_budget,
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": PARSER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
+        raw_json = self._call_llm_sync(
+            system_prompt=PARSER_SYSTEM_PROMPT,
+            user_message=user_message,
             temperature=0.1,
             max_tokens=4000,
             response_format={"type": "json_object"},
         )
 
-        raw_json = response.choices[0].message.content
         parsed = json.loads(raw_json)
-
         return self._build_problem_space(parsed, max_runs_budget)
 
     def _build_user_message(

@@ -8,11 +8,11 @@ Semantic Citation Layer. Every claim MUST be cited.
 import json
 import os
 from typing import Optional
-from openai import AzureOpenAI
 
 from app.models.problem_space import (
     ProblemSpace, ExperimentCandidate, DecisionCard,
 )
+from app.agents.foundry_client import AgentBase, get_foundry_client
 
 
 EXPLAINER_SYSTEM_PROMPT = """You are the Explainer Agent of Tessellarium, a decisive experiment compiler.
@@ -45,10 +45,12 @@ RULES:
 8. Return ONLY the JSON object. No explanation, no markdown, no commentary."""
 
 
-class ExplainerAgent:
+class ExplainerAgent(AgentBase):
     """
     Generates grounded Decision Cards for DOE Planner candidates.
     Uses GPT-4o with evidence from the Semantic Citation Layer.
+
+    Foundry agent name: tessellarium-explainer
     """
 
     def __init__(
@@ -57,11 +59,13 @@ class ExplainerAgent:
         api_key: Optional[str] = None,
         api_version: str = "2025-12-01-preview",
         model: str = "gpt-4o",
+        foundry_client=None,
     ):
-        self.model = model
-        self.client = AzureOpenAI(
-            azure_endpoint=azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-            api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY", ""),
+        super().__init__(
+            model=model,
+            foundry_client=foundry_client or get_foundry_client(),
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
             api_version=api_version,
         )
 
@@ -78,18 +82,14 @@ class ExplainerAgent:
             problem_space, candidate, grounding_results,
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": EXPLAINER_SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
+        raw_json = await self._call_llm(
+            system_prompt=EXPLAINER_SYSTEM_PROMPT,
+            user_message=user_message,
             temperature=0.2,
             max_tokens=2000,
             response_format={"type": "json_object"},
         )
 
-        raw_json = response.choices[0].message.content
         parsed = json.loads(raw_json)
         card = self._build_decision_card(parsed)
         candidate.decision_card = card
