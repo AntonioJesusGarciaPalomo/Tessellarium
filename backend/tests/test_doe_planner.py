@@ -264,5 +264,32 @@ def test_doe_compilation():
     print("=" * 70)
 
 
+def test_classical_integration():
+    """Test that classical generators integrate with the planner."""
+    print("\n" + "=" * 70)
+    print("CLASSICAL INTEGRATION TEST")
+    print("=" * 70)
+
+    ps = create_demo_problem_space()
+
+    planner = DOEPlanner(ps)
+    candidates = planner.compile()
+
+    assert len(candidates) == 3
+
+    for c in candidates:
+        assert hasattr(c.design_matrix, 'design_source'), "design_source field missing"
+        print(f"  {c.strategy.value}: source={c.design_matrix.design_source}, "
+              f"D-eff={c.design_matrix.d_efficiency}, "
+              f"GWLP={c.design_matrix.gwlp}")
+
+    disc_cand = next(c for c in candidates if c.strategy == CandidateStrategy.MAX_DISCRIMINATION)
+    assert disc_cand.design_matrix.design_source == "greedy", \
+        f"MAX_DISCRIMINATION should be greedy, got {disc_cand.design_matrix.design_source}"
+
+    print("\nCLASSICAL INTEGRATION TEST PASSED ✅")
+
+
 if __name__ == "__main__":
     test_doe_compilation()
+    test_classical_integration()

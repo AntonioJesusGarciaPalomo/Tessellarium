@@ -134,6 +134,11 @@ class DesignMatrix(BaseModel):
     num_runs: int
     design_family: DesignFamily
     design_properties: dict = {}
+    design_source: str = "greedy"
+    d_efficiency: Optional[float] = None
+    a_efficiency: Optional[float] = None
+    gwlp: Optional[list[float]] = None
+    design_rank: Optional[int] = None
     verification_status: VerificationStatus = VerificationStatus.NOT_ATTEMPTED
     verification_details: Optional[str] = None
 

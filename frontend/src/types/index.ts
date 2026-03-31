@@ -64,6 +64,11 @@ export interface DesignMatrix {
   num_runs: number
   design_family: DesignFamily
   design_properties: Record<string, any>
+  design_source: string
+  d_efficiency: number | null
+  a_efficiency: number | null
+  gwlp: number[] | null
+  design_rank: number | null
   verification_status: VerificationStatus
   verification_details?: string
 }
