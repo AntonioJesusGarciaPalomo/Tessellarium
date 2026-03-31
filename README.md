@@ -285,47 +285,14 @@ Tessellarium constructs the design, applies constraint exclusions, and reports: 
 ---
 
 ## Architecture
-
+ 
 The system separates three types of reasoning following the same neurosymbolic principle recently validated for mathematical discovery in combinatorial design theory *(Xia et al., 2026)*:
-
+ 
 > The LLM interprets and explains.
 > Deterministic code computes and optimizes.
 > The researcher directs and decides.
-
-```mermaid
-flowchart TB
-    subgraph Interpretation["🧠 LLM Agents — Interpret & Explain"]
-        direction LR
-        Parser["Parser Agent<br/><i>GPT-4o</i><br/>Unstructured → Structured"]
-        Critic["Critic Agent<br/><i>GPT-4o-mini</i><br/>Identify weaknesses"]
-        Explainer["Explainer Agent<br/><i>GPT-4o</i><br/>Generate Decision Cards"]
-    end
-
-    subgraph Computation["⚙️ Deterministic Engines — Compute & Optimize"]
-        direction LR
-        Safety["Safety Governor<br/><i>Regex + Content Safety API</i>"]
-        DOE["DOE Planner<br/><i>OAPackage + PyDOE2 + Greedy</i>"]
-        Lean["Lean 4 Verifier<br/><i>Formal proofs</i>"]
-    end
-
-    subgraph Infrastructure["☁️ Azure Services"]
-        direction LR
-        AOAI["Azure OpenAI"]
-        CU["Content Understanding"]
-        CS["Content Safety"]
-        Search["AI Search"]
-        Cosmos["Cosmos DB"]
-        CA["Container Apps"]
-        SWA["Static Web Apps"]
-    end
-
-    Interpretation --> Computation
-    Computation --> Infrastructure
-
-    style Interpretation fill:#e8eaf6,stroke:#3f51b5
-    style Computation fill:#e8f5e9,stroke:#2e7d32
-    style Infrastructure fill:#fff3e0,stroke:#ef6c00
-```
+ 
+![Tessellarium Architecture](docs/images/architecture/tessellarium-architecture.png)
 
 ### Azure services
 
