@@ -1,12 +1,27 @@
 ![Tessellarium Banner](docs/images/brand/tessellarium-banner.png)
 
+<!-- Badges -->
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776ab.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Pydantic v2](https://img.shields.io/badge/Pydantic-v2-e92063.svg?logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
+[![PyDOE2](https://img.shields.io/badge/PyDOE2-1.3%2B-orange.svg)](https://pypi.org/project/pyDOE2/)
+[![OAPackage](https://img.shields.io/badge/OAPackage-2.7%2B-purple.svg)](https://oapackage.readthedocs.io/)
+[![Lean 4](https://img.shields.io/badge/Lean_4-Formal_Verification-dc322f.svg)](https://leanprover.github.io/)
+
+[![Infrastructure as Code](https://img.shields.io/badge/IaC-Bicep-f5a623.svg?logo=azuredevops&logoColor=white)](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
+[![Built on Azure](https://img.shields.io/badge/Built_on-Microsoft_Azure-0078d4.svg?logo=microsoftazure&logoColor=white)](https://azure.microsoft.com/)
+[![Microsoft Innovation Challenge](https://img.shields.io/badge/Microsoft-Innovation_Challenge_2026-5e5e5e.svg?logo=microsoft&logoColor=white)](#acknowledgments)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ### Decisive Experiment Compiler
+
+> *Unbiased experimental mosaics, by design.*
 
 ---
 
 ## The problem
 
-A researcher: has competing hypotheses, partial data — protocols in PDF, results in CSV, images from assays — real-world constraints such as limited budgets, depleted materials, and safety-sensitive domains, and one urgent question: **what experiment should I run next?**
+A researcher has competing hypotheses, partial data — protocols in PDF, results in CSV, images from assays — real-world constraints such as limited budgets, depleted materials, and safety-sensitive domains, and one urgent question: **what experiment should I run next?**
 
 Today, the answer comes from intuition, conversations with colleagues, or a language model that generates plausible text without formal guarantees. None of these sources compute which experiment is optimal, what combinatorial coverage it achieves, which hypotheses it can and cannot discriminate, or what the researcher loses if a constraint prevents it from being executed.
 
@@ -20,9 +35,9 @@ This affects experimental scientists and research leaders across chemistry, phar
 
 Tessellarium treats the design of the next experiment as a **constrained combinatorial optimization problem**.
 
-Given competing hypotheses, partial evidence, material and safety constraints, and a fixed run budget, it computes the minimal experimental matrix that maximizes hypothesis discrimination using established combinatorial design families: covering arrays, Latin squares, BIBDs, orthogonal arrays, and fractional factorials.
+Given competing hypotheses, partial evidence, material and safety constraints, and a fixed run budget, it computes the minimal experimental matrix that maximizes hypothesis discrimination using established combinatorial design families: orthogonal arrays, covering arrays, Latin squares, BIBDs, and fractional factorials.
 
-Its output is not a conversational recommendation but a **concrete experimental artifact**: the design matrix, the combinatorial family selected with its justification, the verifiable properties of the design, and the explicit cost of each constraint in terms of lost discrimination capability.
+Its output is not a conversational recommendation but a **concrete experimental artifact**: the design matrix, the combinatorial family selected with its justification, the verifiable statistical properties of the design (D-efficiency, GWLP, pairwise coverage), and the explicit cost of each constraint in terms of lost discrimination capability.
 
 ---
 
@@ -30,14 +45,94 @@ Its output is not a conversational recommendation but a **concrete experimental 
 
 The system is grounded in Fisher's theory of experimental design, where experiments are not improvised but constructed with formal mathematical structure.
 
-The core engine is a **deterministic Python planner — not a language model** — that enumerates untested factor-level combinations, identifies which ones discriminate between specific hypothesis pairs, and selects the smallest subset that maximizes discrimination under constraints.
+The core engine follows a five-stage pipeline — **Generate → Filter → Score → Repair → Assess** — that separates mathematical design construction from hypothesis-specific optimization:
+
+```mermaid
+flowchart LR
+    G["① Generate<br/><i>Classical designs from<br/>known families</i>"]
+    F["② Filter<br/><i>Remove rows violating<br/>constraints</i>"]
+    S["③ Score<br/><i>Discrimination power<br/>against hypothesis pairs</i>"]
+    R["④ Repair<br/><i>Greedy fill to restore<br/>coverage if damaged</i>"]
+    A["⑤ Assess<br/><i>D-efficiency, GWLP,<br/>rank on all candidates</i>"]
+
+    G --> F --> S --> R --> A
+
+    style G fill:#e8f0fe,stroke:#4285f4
+    style F fill:#fef7e0,stroke:#f9ab00
+    style S fill:#e6f4ea,stroke:#34a853
+    style R fill:#fce8e6,stroke:#ea4335
+    style A fill:#f3e8fd,stroke:#a142f4
+```
+
+Design generation uses two specialized libraries — **OAPackage** for orthogonal array enumeration, D-optimal design synthesis, and statistical quality assessment; and **PyDOE2** for generalized subset designs and fractional factorials — with greedy set cover as the universal fallback. Discrimination scoring against hypothesis pairs is Tessellarium's unique contribution: no classical DOE library optimizes for this.
 
 ---
 
 ## How it works
 
+```mermaid
+flowchart TB
+    subgraph Phase1["Phase 1 — Multimodal Ingestion"]
+        PDF["📄 Protocol PDF"]
+        CSV["📊 Results CSV"]
+        IMG["🖼️ Assay Image"]
+        CU["Azure Content<br/>Understanding"]
+        PDF --> CU
+    end
+
+    subgraph Phase2["Phase 2 — Problem Space Construction"]
+        PA["Parser Agent<br/><i>GPT-4o</i>"]
+        PS["Problem Space<br/><i>Factors · Hypotheses · Evidence<br/>Constraints · Completed runs</i>"]
+        CU --> PA
+        CSV --> PA
+        IMG -.->|planned| PA
+        PA --> PS
+    end
+
+    subgraph Phase3["Phase 3 — Safety Gate"]
+        SG["Safety Governor<br/><i>Deterministic rules<br/>+ Content Safety API</i>"]
+        PS --> SG
+        SG -->|"ALLOW"| DOE
+        SG -->|"DEGRADE: exclude<br/>region + show cost"| DOE
+        SG -->|"BLOCK"| Block["Evidence summary<br/>+ mandatory human review"]
+    end
+
+    subgraph Phase4["Phase 4 — Deterministic Compilation"]
+        DOE["DOE Planner<br/><i>Pure Python · Zero LLM</i>"]
+        OA["OAPackage<br/><i>Orthogonal arrays<br/>D-optimal designs</i>"]
+        PD["PyDOE2<br/><i>GSD · Fractional factorial</i>"]
+        GR["Greedy<br/><i>Set cover by<br/>discrimination</i>"]
+        DOE --> OA & PD & GR
+        OA & PD & GR --> C1["Candidate 1<br/>Max Discrimination"]
+        OA & PD & GR --> C2["Candidate 2<br/>Max Robustness"]
+        OA & PD & GR --> C3["Candidate 3<br/>Max Coverage"]
+    end
+
+    subgraph Phase5["Phase 5 — Critique & Explanation"]
+        CR["Critic Agent<br/><i>GPT-4o-mini</i>"]
+        EX["Explainer Agent<br/><i>GPT-4o</i>"]
+        DC["Decision Cards<br/><i>6-field structured<br/>explanation per candidate</i>"]
+        C1 & C2 & C3 --> CR --> EX --> DC
+        EX -.-> SR["AI Search<br/><i>Grounding citations</i>"]
+    end
+
+    subgraph Phase6["Phase 6 — Optional Verification"]
+        LN["Lean 4<br/><i>Formal proof of<br/>design properties</i>"]
+        C1 & C2 & C3 -.-> LN
+    end
+
+    DC --> OUT["3 candidates + design matrices<br/>+ decision cards + coverage map<br/>+ discrimination metrics<br/>+ constraint costs + quality metrics"]
+
+    style Phase1 fill:#f8f9fa,stroke:#dadce0
+    style Phase2 fill:#f8f9fa,stroke:#dadce0
+    style Phase3 fill:#fff8e1,stroke:#f9ab00
+    style Phase4 fill:#e8f5e9,stroke:#34a853
+    style Phase5 fill:#e8eaf6,stroke:#3f51b5
+    style Phase6 fill:#fce4ec,stroke:#e91e63
+```
+
 **1. Multimodal ingestion.**
-The researcher uploads a protocol (PDF), experimental results (CSV), and optionally an assay image. Azure Content Understanding extracts document structure. Code Interpreter for CSV analysis and GPT-4o vision for image interpretation are planned.
+The researcher uploads a protocol (PDF), experimental results (CSV), and optionally an assay image. Azure Content Understanding extracts document structure. Code Interpreter for CSV analysis and GPT-4o vision for image interpretation are planned for a future release.
 
 **2. Problem space construction.**
 A Parser Agent (GPT-4o) structures all extracted information into a unified representation: factors and their levels, competing hypotheses with epistemic and operative states, existing evidence, constraints, and already-tested combinations.
@@ -46,19 +141,21 @@ A Parser Agent (GPT-4o) structures all extracted information into a unified repr
 A deterministic Safety Governor analyzes the problem space for clinically or biologically sensitive domains. Sensitive regions are excluded from the factor space *before* compilation — safety is a constraint on the input, not a filter on the output. The system reports what discrimination is lost by each exclusion.
 
 **4. Deterministic compilation.**
-The DOE Planner — pure Python, zero LLM — computes the coverage map, builds the discrimination matrix between hypothesis pairs, and compiles three complementary candidates: one optimized for maximum discrimination, one for robustness and replication, and one for combinatorial coverage of unexplored factor interactions.
+The DOE Planner — pure Python, zero LLM — generates designs from known combinatorial families using OAPackage and PyDOE2, filters them against constraints, scores them by hypothesis discrimination, repairs coverage gaps, and assesses statistical quality. It produces three complementary candidates: one optimized for maximum discrimination, one for robustness and replication, and one for combinatorial coverage.
 
-**5. Explanation and verification.**
-An Explainer Agent generates a six-field decision card for each candidate: recommendation, rationale, evidence used, assumptions, limits, and what observation would change the recommendation. Design properties can optionally be verified formally in Lean 4.
+**5. Critique and explanation.**
+A Critic Agent identifies weaknesses (confounding, coverage gaps, redundancy). An Explainer Agent generates a six-field decision card for each candidate: recommendation, rationale, evidence used, assumptions, limits, and what observation would change the recommendation — all grounded with citations from the Semantic Citation Layer.
 
-**6. Recalculation under constraints.**
-When the researcher adds a constraint ("Lot C is exhausted"), the system recalculates the full plan and quantifies exactly which hypothesis pairs can no longer be distinguished and why.
+**6. Optional verification.**
+Design properties (pairwise coverage, Latin square bijectivity, BIBD balance) can be formally verified in Lean 4 via a dedicated verification service.
 
 ---
 
 ## Key differentiators
 
-**Compiler, not assistant.** The experiment design engine is deterministic code that selects combinatorial families and generates optimal matrices under constraints. The LLM interprets inputs and explains outputs but never produces the experimental plan.
+**Compiler, not assistant.** The experiment design engine is deterministic code that generates designs from known combinatorial families, scores them by discrimination power, and computes quality metrics (D-efficiency, GWLP). The LLM interprets inputs and explains outputs but never produces the experimental plan.
+
+**Mathematically grounded designs.** Candidates are generated from OAPackage (orthogonal arrays with proven strength-2 coverage, D-optimal designs via coordinate exchange) and PyDOE2 (fractional factorials, generalized subset designs), not from greedy heuristics alone. Every design carries its D-efficiency and generalized word-length pattern.
 
 **Safety as a compilation constraint.** Sensitive domains are excluded from the search space before the planner runs, not filtered after. The system shows what discrimination is lost per exclusion.
 
@@ -68,19 +165,122 @@ When the researcher adds a constraint ("Lot C is exhausted"), the system recalcu
 
 ---
 
+## Combinatorial design families
+
+Tessellarium selects from established design families based on the problem structure. Each family has different strengths. The intuition behind the most important ones:
+
+### Orthogonal arrays
+
+**The idea:** every pair of factors is tested in every combination of their levels, even though you don't test all possible runs.
+
+**Analogy:** Imagine you're testing 4 pizza recipes varying crust (thin/thick), sauce (red/white), and cheese (mozzarella/cheddar). A full test is 2×2×2 = 8 pizzas. An orthogonal array of 4 runs lets you taste just 4 pizzas, yet for *every pair* of factors, you've tried all four combinations. You can cleanly separate "is it the crust or the sauce?" — the effects are not confounded.
+
+```
+Run  Crust  Sauce  Cheese
+ 1   Thin   Red    Mozzarella
+ 2   Thin   White  Cheddar
+ 3   Thick  Red    Cheddar
+ 4   Thick  White  Mozzarella
+```
+
+Check: Crust × Sauce? Thin-Red ✓, Thin-White ✓, Thick-Red ✓, Thick-White ✓. All four pairs appear. Same for every other pair of columns. That's strength-2 orthogonality — the defining property. Tessellarium uses **OAPackage** to enumerate these arrays and select the one with the best D-efficiency.
+
+### Covering arrays
+
+**The idea:** guarantee that every t-way combination of factor levels appears *at least once*, even under constraints.
+
+**Analogy:** You're testing a web form with 5 fields, each with 3 options. A full test is 3⁵ = 243 configurations. A strength-2 covering array might need only 15 — every pair of fields still sees all 9 combinations. If a bug requires two specific settings to trigger, you'll find it.
+
+Unlike orthogonal arrays, covering arrays allow *imbalanced* replication — some combinations may appear more than once. This flexibility is what makes them work when constraints exclude certain combinations. Tessellarium uses covering arrays as the default when constraints invalidate pure orthogonal designs.
+
+### Fractional factorials
+
+**The idea:** run a mathematically chosen *fraction* of the full factorial, trading higher-order interactions you don't care about for fewer runs.
+
+**Analogy:** You have 6 binary factors (on/off each). Full factorial: 2⁶ = 64 runs. A 2⁶⁻² fractional factorial: 16 runs. You can estimate all 6 main effects and many 2-factor interactions, but some 2-factor interactions are "aliased" with each other — you can't tell them apart. The aliasing structure is known in advance, so the researcher chooses the resolution that matches their priorities.
+
+```
+Resolution III:  Main effects estimable, but aliased with 2-factor interactions.
+Resolution IV:   Main effects clean; 2-factor interactions aliased with each other.
+Resolution V:    Main effects and 2-factor interactions all estimable.
+```
+
+Tessellarium uses **PyDOE2** for these when all factors have the same number of levels.
+
+### Latin squares
+
+**The idea:** arrange treatments in a grid where each treatment appears exactly once per row and once per column, blocking two sources of nuisance variation simultaneously.
+
+**Analogy:** A hospital tests 4 drugs across 4 wards (rows) and 4 time periods (columns). Each drug appears in every ward and every period exactly once. Ward-to-ward variation and period-to-period variation are both blocked — the drug effect is estimated cleanly.
+
+```
+          Period 1  Period 2  Period 3  Period 4
+Ward A       D₁        D₂        D₃        D₄
+Ward B       D₂        D₃        D₄        D₁
+Ward C       D₃        D₄        D₁        D₂
+Ward D       D₄        D₁        D₂        D₃
+```
+
+### BIBDs (Balanced Incomplete Block Designs)
+
+**The idea:** when blocks are too small to hold all treatments, arrange them so every pair of treatments appears together in the same number of blocks.
+
+**Analogy:** A wine tasting with 7 wines, but each taster can only try 3 per session. A BIBD arranges the sessions so every pair of wines is compared by the same number of tasters — no pair has an unfair advantage.
+
+```
+Session 1: Wine A, Wine B, Wine D
+Session 2: Wine B, Wine C, Wine E
+Session 3: Wine C, Wine D, Wine F
+Session 4: Wine D, Wine E, Wine G
+Session 5: Wine E, Wine F, Wine A
+Session 6: Wine F, Wine G, Wine B
+Session 7: Wine G, Wine A, Wine C
+```
+
+Every pair of wines appears together in exactly 1 session. That's the *balance* property — λ = 1.
+
+### D-optimal designs
+
+**The idea:** when no standard family fits (non-standard run sizes, irregular constraints), use numerical optimization to find the design that maximizes the determinant of the information matrix — the design that gives the smallest confidence regions for the estimated effects.
+
+Tessellarium uses **OAPackage's coordinate-exchange algorithm** (`Doptimize`) to generate these. The optimization function is configurable: α=[1,2,0] prioritizes main-effect robustness (for MAX_ROBUSTNESS candidates); α=[1,0,0] targets pure D-efficiency (for MAX_COVERAGE candidates).
+
+---
+
 ## Applied examples
 
 ### Pharmaceutical process optimization
 
-In pharmaceutical development, Design of Experiments (DoE) is a standard methodology for reaction optimization under Quality by Design (QbD) frameworks. A typical esterification process with six factors (temperature, acid equivalents, reaction time, solvent, catalyst loading, water content) requires a sequential workflow — scoping, screening, RSM optimization, robustness — consuming 30-40 experiments across weeks.
+In pharmaceutical development, Design of Experiments (DoE) is a standard methodology for reaction optimization under Quality by Design (QbD) frameworks. A typical esterification process with six factors (temperature, acid equivalents, reaction time, solvent, catalyst loading, water content) requires a sequential workflow — scoping, screening, RSM optimization, robustness — consuming 30–40 experiments across weeks.
 
 Tessellarium compresses this workflow: given competing hypotheses about the root cause of yield drops ("insufficient acid" vs "time too short" vs "acid×time interaction"), it compiles a single covering array of 12 runs that discriminates between all three hypotheses while respecting material and regulatory constraints (e.g., ICH solvent restrictions). When a reagent becomes unavailable mid-study, the system recalculates and quantifies the discrimination lost.
+
+```mermaid
+sequenceDiagram
+    participant R as Researcher
+    participant T as Tessellarium
+    participant DOE as DOE Planner
+
+    R->>T: Upload protocol PDF + results CSV
+    T->>T: Parse → 6 factors, 3 hypotheses, 10 completed runs
+    T->>DOE: Compile (budget = 12 runs)
+    DOE->>DOE: Generate OA(12, 6, mixed) via OAPackage
+    DOE->>DOE: Score by discrimination: H1 vs H2 vs H3
+    DOE-->>T: 3 candidates + D-efficiency + GWLP
+    T-->>R: Decision cards with trade-offs
+
+    R->>T: "Lot C is exhausted"
+    T->>DOE: Re-compile with constraint
+    DOE->>DOE: Filter → 2 rows removed → Repair coverage
+    DOE-->>T: New plan + "H1 vs H3 discrimination drops 14%"
+    T-->>R: Updated candidates + constraint cost
+```
 
 ### Agronomic field trials
 
 A 7×7 field trial with two blocking factors (soil moisture gradient, sun exposure gradient), two treatment factors (7 fertilizer formulations, 7 irrigation levels), and spatial constraints (equipment failure in column 4, safety exclusion of fertilizer G near a watercourse) requires a pair of Mutually Orthogonal Latin Squares (MOLS) that respect all exclusions.
 
-Tessellarium constructs the MOLS algebraically, applies constraint exclusions, and reports: "Without irrigation levels R5-R7 in column 4, the interaction fertilizer×irrigation in the central zone cannot be fully characterized. Discrimination between H2 (irrigation insufficient) and H3 (interaction effect) drops 14%."
+Tessellarium constructs the design, applies constraint exclusions, and reports: "Without irrigation levels R5–R7 in column 4, the interaction fertilizer×irrigation in the central zone cannot be fully characterized. Discrimination between H2 (irrigation insufficient) and H3 (interaction effect) drops 14%."
 
 ---
 
@@ -92,19 +292,63 @@ The system separates three types of reasoning following the same neurosymbolic p
 > Deterministic code computes and optimizes.
 > The researcher directs and decides.
 
+```mermaid
+flowchart TB
+    subgraph Interpretation["🧠 LLM Agents — Interpret & Explain"]
+        direction LR
+        Parser["Parser Agent<br/><i>GPT-4o</i><br/>Unstructured → Structured"]
+        Critic["Critic Agent<br/><i>GPT-4o-mini</i><br/>Identify weaknesses"]
+        Explainer["Explainer Agent<br/><i>GPT-4o</i><br/>Generate Decision Cards"]
+    end
+
+    subgraph Computation["⚙️ Deterministic Engines — Compute & Optimize"]
+        direction LR
+        Safety["Safety Governor<br/><i>Regex + Content Safety API</i>"]
+        DOE["DOE Planner<br/><i>OAPackage + PyDOE2 + Greedy</i>"]
+        Lean["Lean 4 Verifier<br/><i>Formal proofs</i>"]
+    end
+
+    subgraph Infrastructure["☁️ Azure Services"]
+        direction LR
+        AOAI["Azure OpenAI"]
+        CU["Content Understanding"]
+        CS["Content Safety"]
+        Search["AI Search"]
+        Cosmos["Cosmos DB"]
+        CA["Container Apps"]
+        SWA["Static Web Apps"]
+    end
+
+    Interpretation --> Computation
+    Computation --> Infrastructure
+
+    style Interpretation fill:#e8eaf6,stroke:#3f51b5
+    style Computation fill:#e8f5e9,stroke:#2e7d32
+    style Infrastructure fill:#fff3e0,stroke:#ef6c00
+```
+
 ### Azure services
 
 | Service | Role |
 |---|---|
-| **Foundry Agent Service** | Agent orchestration (Parser, Critic, Explainer) |
+| **Foundry Agent Service** | Agent orchestration (Parser, Critic, Explainer) — optional, falls back to direct Azure OpenAI |
 | **Azure OpenAI** (GPT-4o, GPT-4o-mini) | Interpretation, explanation, vision |
 | **Azure Content Understanding** | PDF protocol ingestion |
 | **Azure AI Content Safety** | Prompt Shields, domain-specific categories |
 | **Azure AI Search** | Hybrid search for grounded citations |
 | **Cosmos DB** | Session persistence |
-| **Container Apps** | Backend hosting |
+| **Container Apps** | Backend hosting (API + worker + Lean verifier) |
 | **Static Web Apps** | Frontend hosting |
+| **Front Door Premium + WAF** | CDN, TLS termination, bot protection |
 | **Lean 4** *(optional)* | Formal verification of design properties |
+
+### DOE computation libraries
+
+| Library | Role |
+|---|---|
+| **OAPackage** | Orthogonal array enumeration, D-optimal design synthesis, quality metrics (D-efficiency, GWLP, rank) |
+| **PyDOE2** | Generalized subset designs (mixed-level fractional factorials), 2-level fractional factorials, full factorials |
+| **Greedy set cover** | Hypothesis-discrimination-optimized selection — Tessellarium's unique contribution |
 
 The result is an auditable experimental artifact with traceable justification at every step, from ingestion to compilation to verification.
 
@@ -128,15 +372,14 @@ cd tessellarium
 
 # Backend
 cd backend
-cp .env.template .env
-# Edit .env with your Azure credentials
+cp .env.template .env          # Edit with your Azure credentials (optional for tests)
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
 # Frontend (in a separate terminal)
 cd frontend
 npm install
-npm start
+npm run dev
 ```
 
 ### Run the integration test (no Azure credentials needed)
@@ -148,16 +391,33 @@ python tests/test_doe_planner.py
 
 This test simulates the full pipeline: a reagent stability assay with 3 factors, 3 hypotheses, 4 completed runs, a budget of 4 more runs, constraint addition ("Lot C exhausted"), recalculation with discrimination cost, and a clinical safety block. All components are deterministic — no API calls required.
 
+### Run the full test suite
+
+```bash
+cd backend
+python -m pytest tests/ -v
+
+# Or run individual test files:
+python tests/test_doe_planner.py          # Core DOE compilation + constraints
+python tests/test_design_generators.py    # Classical design generation (OAPackage + PyDOE2)
+python tests/test_safety_governor.py      # Safety checks (ALLOW / DEGRADE / BLOCK)
+python tests/test_critic_agent.py         # Offline critique logic
+python tests/test_explainer_agent.py      # Decision card generation
+python tests/test_search_service.py       # Semantic Citation Layer chunk extraction
+python tests/test_content_understanding.py # PDF parsing
+python tests/test_cosmos_store.py         # Serialization roundtrip
+python tests/test_api_integration.py      # FastAPI endpoint tests
+```
+
 ### Deploy to Azure
 
 ```bash
-# Provision infrastructure and deploy
 azd auth login
 azd init
 azd up
 ```
 
-This provisions all Azure resources via Bicep (OpenAI, Content Safety, AI Search, Cosmos DB, Container Apps, Static Web Apps) and deploys the backend and frontend.
+This provisions all Azure resources via Bicep (OpenAI, Content Safety, AI Search, Cosmos DB, Container Apps, Static Web Apps, Front Door + WAF) and deploys the backend and frontend.
 
 ---
 
@@ -179,58 +439,100 @@ tessellarium/
 │   └── launch.json                     # Debug configurations
 │
 ├── infra/                              # Infrastructure as Code
-│   ├── main.bicep                      # Orchestrator
+│   ├── main.bicep                      # Orchestrator (subscription-scoped)
 │   ├── main.parameters.json            # Environment parameters
-│   ├── abbreviations.json              # Resource naming
+│   ├── abbreviations.json              # Resource naming conventions
 │   └── modules/
-│       ├── openai.bicep                # Azure OpenAI (GPT-4o + GPT-4o-mini)
+│       ├── openai.bicep                # Azure OpenAI (GPT-4o, GPT-4o-mini, GPT-4.1, embeddings)
 │       ├── content-safety.bicep        # Azure AI Content Safety
-│       ├── search.bicep                # Azure AI Search
-│       ├── cosmos.bicep                # Cosmos DB serverless (sessions + threads)
-│       ├── storage.bicep              # Azure Blob Storage (uploads, processed, literature)
-│       ├── container-apps.bicep        # Container Apps + Lean + registry
-│       └── static-web-app.bicep        # Static Web App
+│       ├── search.bicep                # Azure AI Search (semantic enabled)
+│       ├── cosmos.bicep                # Cosmos DB serverless (sessions, threads, compilations)
+│       ├── storage.bicep               # Azure Blob Storage (uploads, processed, literature)
+│       ├── container-apps.bicep        # Container Apps (API + worker + Lean verifier)
+│       ├── static-web-app.bicep        # Static Web App (React frontend)
+│       ├── acr.bicep                   # Azure Container Registry
+│       ├── network.bicep               # VNet + private DNS zones
+│       ├── identity.bicep              # Managed identities + RBAC
+│       ├── agent-stores.bicep          # Foundry agent-dedicated stores
+│       ├── foundry.bicep               # Foundry Hub + Project
+│       ├── front-door.bicep            # Front Door Premium + WAF
+│       └── private-endpoint.bicep      # Reusable PE module
 │
 ├── backend/
-│   ├── Dockerfile                      # Container image
-│   ├── requirements.txt                # Python dependencies
-│   ├── .env.template                   # Environment template
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── .env.template
 │   ├── main.py                         # FastAPI orchestrator
 │   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py                 # Azure configuration
+│   │   └── settings.py                 # Azure configuration (pydantic-settings)
 │   ├── app/
-│   │   ├── __init__.py
 │   │   ├── models/
-│   │   │   ├── __init__.py
-│   │   │   └── problem_space.py        # Central data schema
+│   │   │   └── problem_space.py        # Central data schema (ProblemSpace, all types)
 │   │   ├── doe_planner/
-│   │   │   ├── __init__.py
-│   │   │   └── planner.py              # Deterministic compiler
+│   │   │   ├── planner.py              # Deterministic compiler (5-stage pipeline)
+│   │   │   └── design_generators.py    # OAPackage + PyDOE2 generator hierarchy
 │   │   ├── safety/
-│   │   │   ├── __init__.py
 │   │   │   └── governor.py             # Deterministic policy engine
 │   │   ├── agents/
-│   │   │   ├── __init__.py
-│   │   │   └── parser_agent.py         # GPT-4o structured extraction
+│   │   │   ├── foundry_client.py       # Azure Foundry / direct OpenAI client
+│   │   │   ├── parser_agent.py         # GPT-4o structured extraction
+│   │   │   ├── critic_agent.py         # Design weakness analysis
+│   │   │   └── explainer_agent.py      # Decision card generation
 │   │   └── services/
-│   │       ├── __init__.py
-│   │       ├── content_understanding.py
-│   │       ├── cosmos_store.py
-│   │       └── search_service.py
+│   │       ├── content_understanding.py # PDF protocol ingestion
+│   │       ├── content_safety_service.py # Text moderation + Prompt Shields
+│   │       ├── cosmos_store.py          # Session persistence
+│   │       └── search_service.py        # Semantic Citation Layer
 │   └── tests/
-│       └── test_doe_planner.py         # Integration test
+│       ├── test_doe_planner.py          # Core integration test
+│       ├── test_design_generators.py    # Classical design generation
+│       ├── test_safety_governor.py      # Safety checks
+│       ├── test_critic_agent.py         # Critic offline logic
+│       ├── test_explainer_agent.py      # Explainer offline logic
+│       ├── test_search_service.py       # Chunk extraction
+│       ├── test_content_understanding.py # PDF parsing
+│       ├── test_cosmos_store.py         # Serialization
+│       └── test_api_integration.py      # API endpoints
 │
 ├── frontend/
 │   ├── package.json
-│   ├── public/
-│   │   └── index.html
+│   ├── vite.config.ts
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   ├── index.html
 │   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── api/client.ts               # Axios API client
+│       ├── types/index.ts              # TypeScript interfaces
 │       ├── components/
-│       ├── pages/
-│       └── styles/
+│       │   ├── CandidateCard.tsx        # Design candidate display
+│       │   ├── DesignMatrixTable.tsx    # Matrix visualization
+│       │   ├── DecisionCardView.tsx     # 6-field decision card
+│       │   ├── VerificationBadge.tsx    # Lean verification status
+│       │   └── ErrorBoundary.tsx        # React error boundary
+│       └── pages/
+│           ├── Home.tsx
+│           ├── Upload.tsx               # File + text upload
+│           ├── Session.tsx              # Compilation + constraints
+│           └── Sessions.tsx             # Session list
 │
-├── lean/                               # Formal verification (stretch goal)
+├── lean-verify/                        # Lean 4 verification service
+│   ├── Dockerfile                      # Ubuntu + elan + Lean 4
+│   ├── requirements.txt
+│   ├── main.py                         # FastAPI (port 8001)
+│   ├── app/
+│   │   ├── models.py                   # VerificationRequest/Response
+│   │   ├── verifier.py                 # Generate .lean → lake build → parse
+│   │   └── lean_generator.py           # Jinja2 → Lean 4 code
+│   ├── lean_templates/
+│   │   ├── covering_array.lean.j2      # Pairwise coverage proof
+│   │   ├── latin_square.lean.j2        # Bijectivity proof
+│   │   └── bibd.lean.j2               # Balance proof (placeholder)
+│   └── tests/
+│       └── test_lean_generator.py
+│
+├── lean/                               # Lean 4 library (stretch goal)
 │   └── Tessellarium/
 │       ├── lakefile.lean
 │       ├── lean-toolchain
@@ -240,11 +542,6 @@ tessellarium/
 │
 ├── docs/
 │   ├── images/
-│   │   ├── brand/
-│   │   │   └── tessellarium-banner.png # Project banner
-│   │   ├── architecture/
-│   │   ├── ui/
-│   │   └── demos/
 │   ├── architecture/
 │   │   └── data-flow.md
 │   └── roadmap/
@@ -269,7 +566,7 @@ tessellarium/
 | Method | Route | Description |
 |---|---|---|
 | `GET` | `/health` | Health check |
-| `POST` | `/api/upload` | Upload files (PDF, CSV, image) |
+| `POST` | `/api/upload` | Upload files (PDF, CSV, image) → parse → ProblemSpace |
 | `POST` | `/api/parse` | Raw text → Parser Agent → ProblemSpace |
 | `POST` | `/api/problem-space/{id}` | Load ProblemSpace directly (testing) |
 | `POST` | `/api/compile` | Safety → DOE Planner → 3 candidates |
@@ -281,13 +578,49 @@ tessellarium/
 
 ---
 
+## The compilation output
+
+Each compilation produces three candidates. Here is what the researcher sees for each:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Candidate 1: MAX_DISCRIMINATION                                │
+│  Source: greedy   Family: covering_array   Runs: 4/4 budget     │
+│                                                                 │
+│  Design matrix:                                                 │
+│    Run 1: Temperature=30°C, Lot=B, Time=2h                     │
+│    Run 2: Temperature=40°C, Lot=A, Time=1h                     │
+│    Run 3: Temperature=20°C, Lot=B, Time=1h                     │
+│    Run 4: Temperature=40°C, Lot=B, Time=2h                     │
+│                                                                 │
+│  Discrimination:    0.833  (H1 vs H2: 1.000, H1 vs H3: 0.500) │
+│  D-efficiency:      0.612                                       │
+│  GWLP:              [1.0, 0.0, 0.167]                          │
+│                                                                 │
+│  Decision Card:                                                 │
+│    Recommendation: Run these 4 experiments to maximally         │
+│                    distinguish H1 from H2.                      │
+│    Why: ...  Evidence: [1], [2]  Assumptions: ...               │
+│    Limits: ...  What would change: ...                          │
+│                                                                 │
+│  Constraint costs:                                              │
+│    "Lot C exhausted": H2 vs H3 loses 2/5 discriminating runs   │
+│                       (40% discrimination lost)                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+The researcher compares all three candidates and chooses based on their current priority — maximum hypothesis separation, statistical robustness, or broad exploration.
+
+---
+
 ## Current limitations
 
-- **Code Interpreter** for CSV analysis is planned but not yet implemented (CSV is read as raw text)
+- **Code Interpreter** for CSV analysis is planned but not yet implemented (CSV is currently read as raw text)
 - **GPT-4o vision** for image interpretation is planned but not yet implemented
-- **MOLS/BIBD algebraic construction** is not implemented — the DOE Planner uses covering arrays and fractional factorials
-- **Semantic Citation Layer** (literature knowledge base) is on the roadmap; current grounding uses the researcher's own data
-- **Foundry Agent Service** integration is optional — the system falls back to direct Azure OpenAI calls
+- **MOLS algebraic construction** is not implemented — the planner uses orthogonal arrays and covering arrays from OAPackage
+- **BIBD verification** in Lean 4 is a placeholder — covering array and Latin square verification are fully implemented
+- **Semantic Citation Layer** (literature knowledge base) is on the roadmap; current grounding uses the researcher's own uploaded data
+- **Foundry Agent Service** integration is optional — the system falls back to direct Azure OpenAI calls when Foundry is not configured
 
 ---
 
@@ -303,10 +636,15 @@ tessellarium/
 - Colbourn, C.J. & Dinitz, J.H. (2007). *Handbook of Combinatorial Designs*. CRC Press.
 - Hedayat, A.S., Sloane, N.J.A., & Stufken, J. (1999). *Orthogonal Arrays: Theory and Applications*. Springer.
 
-### Neurosymbolic collaboration and Latin squares
+### Neurosymbolic collaboration
 
 - Xia, H., Gomes, C.P., Selman, B., & Szeider, S. (2026). *Agentic Neurosymbolic Collaboration for Mathematical Discovery: A Case Study in Combinatorial Design*. arXiv:2603.08322.
 - Gomes, C.P. & Sellmann, M. (2004). *Streamlined Constraint Reasoning*. CP 2004, LNCS 3258, pp. 274–289.
+
+### DOE computation libraries
+
+- Eendebak, P.T. & Vazquez, A.R. (2019). *OApackage: A Python package for generation and analysis of orthogonal arrays, optimal designs and conference designs*. Journal of Open Source Software, 4(34), 1097.
+- Schoen, E.D., Eendebak, P.T. & Nguyen, M.V.M. (2010). *Complete Enumeration of Pure-Level and Mixed-Level Orthogonal Arrays*. Journal of Combinatorial Designs, 18(2), 123–140.
 
 ### Knowledge graphs and semantic citation
 
@@ -331,11 +669,11 @@ tessellarium/
 
 Tessellarium was developed as part of the Microsoft Innovation Challenge.
 
-Built on Microsoft Azure services: Foundry Agent Service, Azure OpenAI, Azure Content Understanding, Azure AI Content Safety, Azure AI Search, Cosmos DB, Container Apps, and Static Web Apps.
+Built on Microsoft Azure services: Foundry Agent Service, Azure OpenAI, Azure Content Understanding, Azure AI Content Safety, Azure AI Search, Cosmos DB, Container Apps, Static Web Apps, and Front Door.
 
-The theoretical foundation draws from R.A. Fisher's Design of Experiments tradition and from the combinatorial design theory community. The neurosymbolic architecture is informed by recent work on agentic collaboration for mathematical discovery (Xia et al., 2026).
+The theoretical foundation draws from R.A. Fisher's Design of Experiments tradition and from the combinatorial design theory community. The neurosymbolic architecture is informed by recent work on agentic collaboration for mathematical discovery (Xia et al., 2026). Design generation leverages OAPackage (Eendebak & Vazquez, 2019) and PyDOE2.
 
-Special thanks to the open-source communities behind Lean 4, Mathlib, PyDOE2, and the MCP ecosystem.
+Special thanks to the open-source communities behind Lean 4, Mathlib, OAPackage, PyDOE2, and the MCP ecosystem.
 
 ---
 
