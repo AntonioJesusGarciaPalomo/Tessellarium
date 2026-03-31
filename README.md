@@ -49,19 +49,21 @@ The core engine follows a five-stage pipeline — **Generate → Filter → Scor
 
 ```mermaid
 flowchart LR
-    G["① Generate<br/><i>Classical designs from<br/>known families</i>"]
-    F["② Filter<br/><i>Remove rows violating<br/>constraints</i>"]
-    S["③ Score<br/><i>Discrimination power<br/>against hypothesis pairs</i>"]
-    R["④ Repair<br/><i>Greedy fill to restore<br/>coverage if damaged</i>"]
-    A["⑤ Assess<br/><i>D-efficiency, GWLP,<br/>rank on all candidates</i>"]
+    G["<b>① Generate</b><br/>Classical designs from<br/>known families"]
+    F["<b>② Filter</b><br/>Remove rows violating<br/>constraints"]
+    S["<b>③ Score</b><br/>Discrimination power<br/>against hypothesis pairs"]
+    R["<b>④ Repair</b><br/>Greedy fill to restore<br/>coverage if damaged"]
+    A["<b>⑤ Assess</b><br/>D-efficiency, GWLP,<br/>rank on all candidates"]
 
     G --> F --> S --> R --> A
 
-    style G fill:#e8f0fe,stroke:#4285f4
-    style F fill:#fef7e0,stroke:#f9ab00
-    style S fill:#e6f4ea,stroke:#34a853
-    style R fill:#fce8e6,stroke:#ea4335
-    style A fill:#f3e8fd,stroke:#a142f4
+    style G fill:#1a73e8,stroke:#1557b0,color:#ffffff
+    style F fill:#e37400,stroke:#b45d00,color:#ffffff
+    style S fill:#1e8e3e,stroke:#137333,color:#ffffff
+    style R fill:#d93025,stroke:#b3261e,color:#ffffff
+    style A fill:#7b1fa2,stroke:#6a1b9a,color:#ffffff
+
+    linkStyle default stroke:#555,stroke-width:2px
 ```
 
 Design generation uses two specialized libraries — **OAPackage** for orthogonal array enumeration, D-optimal design synthesis, and statistical quality assessment; and **PyDOE2** for generalized subset designs and fractional factorials — with greedy set cover as the universal fallback. Discrimination scoring against hypothesis pairs is Tessellarium's unique contribution: no classical DOE library optimizes for this.
@@ -72,7 +74,7 @@ Design generation uses two specialized libraries — **OAPackage** for orthogona
 
 ```mermaid
 flowchart TB
-    subgraph Phase1["Phase 1 — Multimodal Ingestion"]
+    subgraph Phase1["<b>Phase 1 — Multimodal Ingestion</b>"]
         PDF["📄 Protocol PDF"]
         CSV["📊 Results CSV"]
         IMG["🖼️ Assay Image"]
@@ -80,55 +82,85 @@ flowchart TB
         PDF --> CU
     end
 
-    subgraph Phase2["Phase 2 — Problem Space Construction"]
-        PA["Parser Agent<br/><i>GPT-4o</i>"]
-        PS["Problem Space<br/><i>Factors · Hypotheses · Evidence<br/>Constraints · Completed runs</i>"]
+    subgraph Phase2["<b>Phase 2 — Problem Space Construction</b>"]
+        PA["<b>Parser Agent</b><br/>GPT-4o"]
+        PS[("<b>Problem Space</b><br/>Factors · Hypotheses<br/>Evidence · Constraints<br/>Completed runs")]
         CU --> PA
         CSV --> PA
-        IMG -.->|planned| PA
+        IMG -.->|"planned"| PA
         PA --> PS
     end
 
-    subgraph Phase3["Phase 3 — Safety Gate"]
-        SG["Safety Governor<br/><i>Deterministic rules<br/>+ Content Safety API</i>"]
+    subgraph Phase3["<b>Phase 3 — Safety Gate</b>"]
+        SG["<b>Safety Governor</b><br/>Deterministic rules<br/>+ Content Safety API"]
         PS --> SG
-        SG -->|"ALLOW"| DOE
-        SG -->|"DEGRADE: exclude<br/>region + show cost"| DOE
-        SG -->|"BLOCK"| Block["Evidence summary<br/>+ mandatory human review"]
+        SG -->|"ALLOW ✓"| DOE
+        SG -->|"DEGRADE ⚠️"| DOE
+        SG -->|"BLOCK 🛑"| Block["Evidence summary<br/>+ mandatory human review"]
     end
 
-    subgraph Phase4["Phase 4 — Deterministic Compilation"]
-        DOE["DOE Planner<br/><i>Pure Python · Zero LLM</i>"]
-        OA["OAPackage<br/><i>Orthogonal arrays<br/>D-optimal designs</i>"]
-        PD["PyDOE2<br/><i>GSD · Fractional factorial</i>"]
-        GR["Greedy<br/><i>Set cover by<br/>discrimination</i>"]
+    subgraph Phase4["<b>Phase 4 — Deterministic Compilation</b>"]
+        DOE["<b>DOE Planner</b><br/>Pure Python · Zero LLM"]
+        OA["OAPackage"]
+        PD["PyDOE2"]
+        GR["Greedy"]
         DOE --> OA & PD & GR
-        OA & PD & GR --> C1["Candidate 1<br/>Max Discrimination"]
-        OA & PD & GR --> C2["Candidate 2<br/>Max Robustness"]
-        OA & PD & GR --> C3["Candidate 3<br/>Max Coverage"]
+        OA & PD & GR --> C1["<b>Candidate 1</b><br/>Max Discrimination"]
+        OA & PD & GR --> C2["<b>Candidate 2</b><br/>Max Robustness"]
+        OA & PD & GR --> C3["<b>Candidate 3</b><br/>Max Coverage"]
     end
 
-    subgraph Phase5["Phase 5 — Critique & Explanation"]
-        CR["Critic Agent<br/><i>GPT-4o-mini</i>"]
-        EX["Explainer Agent<br/><i>GPT-4o</i>"]
-        DC["Decision Cards<br/><i>6-field structured<br/>explanation per candidate</i>"]
+    subgraph Phase5["<b>Phase 5 — Critique & Explanation</b>"]
+        CR["<b>Critic Agent</b><br/>GPT-4o-mini"]
+        EX["<b>Explainer Agent</b><br/>GPT-4o"]
+        DC["<b>Decision Cards</b><br/>6-field structured<br/>explanation per candidate"]
         C1 & C2 & C3 --> CR --> EX --> DC
-        EX -.-> SR["AI Search<br/><i>Grounding citations</i>"]
+        EX -.-> SR["AI Search<br/>Grounding citations"]
     end
 
-    subgraph Phase6["Phase 6 — Optional Verification"]
-        LN["Lean 4<br/><i>Formal proof of<br/>design properties</i>"]
+    subgraph Phase6["<b>Phase 6 — Optional Verification</b>"]
+        LN["<b>Lean 4</b><br/>Formal proof of<br/>design properties"]
         C1 & C2 & C3 -.-> LN
     end
 
-    DC --> OUT["3 candidates + design matrices<br/>+ decision cards + coverage map<br/>+ discrimination metrics<br/>+ constraint costs + quality metrics"]
+    DC --> OUT["<b>Output:</b> 3 candidates + design matrices + decision cards<br/>+ coverage map + discrimination metrics + constraint costs"]
 
-    style Phase1 fill:#f8f9fa,stroke:#dadce0
-    style Phase2 fill:#f8f9fa,stroke:#dadce0
-    style Phase3 fill:#fff8e1,stroke:#f9ab00
-    style Phase4 fill:#e8f5e9,stroke:#34a853
-    style Phase5 fill:#e8eaf6,stroke:#3f51b5
-    style Phase6 fill:#fce4ec,stroke:#e91e63
+    style Phase1 fill:#263238,stroke:#546e7a,color:#eceff1
+    style Phase2 fill:#1a237e,stroke:#3949ab,color:#e8eaf6
+    style Phase3 fill:#e65100,stroke:#f57c00,color:#fff3e0
+    style Phase4 fill:#1b5e20,stroke:#388e3c,color:#e8f5e9
+    style Phase5 fill:#283593,stroke:#3f51b5,color:#e8eaf6
+    style Phase6 fill:#4a148c,stroke:#7b1fa2,color:#f3e5f5
+
+    style PDF fill:#37474f,stroke:#78909c,color:#eceff1
+    style CSV fill:#37474f,stroke:#78909c,color:#eceff1
+    style IMG fill:#37474f,stroke:#78909c,color:#eceff1
+    style CU fill:#0d47a1,stroke:#1565c0,color:#ffffff
+
+    style PA fill:#1a237e,stroke:#3949ab,color:#ffffff
+    style PS fill:#0d47a1,stroke:#1976d2,color:#ffffff
+
+    style SG fill:#bf360c,stroke:#e64a19,color:#ffffff
+    style Block fill:#b71c1c,stroke:#c62828,color:#ffffff
+
+    style DOE fill:#1b5e20,stroke:#2e7d32,color:#ffffff
+    style OA fill:#2e7d32,stroke:#43a047,color:#ffffff
+    style PD fill:#2e7d32,stroke:#43a047,color:#ffffff
+    style GR fill:#2e7d32,stroke:#43a047,color:#ffffff
+    style C1 fill:#004d40,stroke:#00796b,color:#ffffff
+    style C2 fill:#004d40,stroke:#00796b,color:#ffffff
+    style C3 fill:#004d40,stroke:#00796b,color:#ffffff
+
+    style CR fill:#283593,stroke:#3f51b5,color:#ffffff
+    style EX fill:#283593,stroke:#3f51b5,color:#ffffff
+    style DC fill:#1a237e,stroke:#3949ab,color:#ffffff
+    style SR fill:#4a148c,stroke:#7b1fa2,color:#ffffff
+
+    style LN fill:#4a148c,stroke:#7b1fa2,color:#ffffff
+
+    style OUT fill:#263238,stroke:#78909c,color:#ffffff
+
+    linkStyle default stroke:#90a4ae,stroke-width:1.5px
 ```
 
 **1. Multimodal ingestion.**
