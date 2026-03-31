@@ -577,36 +577,25 @@ tessellarium/
 
 ---
 
-## The compilation output
+## The compilation output (What the researcher sees)
 
-Each compilation produces three candidates. Here is what the researcher sees for each:
+A chemist investigating a yield drop in her reagent stability assay uploads a protocol PDF and a CSV of results. Tessellarium parses the inputs and identifies:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Candidate 1: MAX_DISCRIMINATION                                │
-│  Source: greedy   Family: covering_array   Runs: 4/4 budget     │
-│                                                                 │
-│  Design matrix:                                                 │
-│    Run 1: Temperature=30°C, Lot=B, Time=2h                     │
-│    Run 2: Temperature=40°C, Lot=A, Time=1h                     │
-│    Run 3: Temperature=20°C, Lot=B, Time=1h                     │
-│    Run 4: Temperature=40°C, Lot=B, Time=2h                     │
-│                                                                 │
-│  Discrimination:    0.833  (H1 vs H2: 1.000, H1 vs H3: 0.500) │
-│  D-efficiency:      0.612                                       │
-│  GWLP:              [1.0, 0.0, 0.167]                          │
-│                                                                 │
-│  Decision Card:                                                 │
-│    Recommendation: Run these 4 experiments to maximally         │
-│                    distinguish H1 from H2.                      │
-│    Why: ...  Evidence: [1], [2]  Assumptions: ...               │
-│    Limits: ...  What would change: ...                          │
-│                                                                 │
-│  Constraint costs:                                              │
-│    "Lot C exhausted": H2 vs H3 loses 2/5 discriminating runs   │
-│                       (40% discrimination lost)                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+- **3 factors:** Temperature (20°C, 30°C, 40°C), Reagent Lot (A, B, C), Incubation Time (1h, 2h)
+- **3 hypotheses:** H1 — temperature drift causes the drop; H2 — lot C is degraded; H3 — incubation time is insufficient
+- **4 runs already completed** (yielding 92%, 90%, 74%, 68%)
+- **Budget:** 4 more runs
+- **Constraint added mid-study:** "Lot C is exhausted" — no more reagent available
+
+She clicks **Compile**. Tessellarium returns three candidates. Here is the first — optimized for maximum hypothesis discrimination:
+
+![Compilation Output — Candidate 1: Max Discrimination](docs/images/ui/compilation-output.png)
+
+The pairwise coverage heatmap makes the trade-off visible: Lot C is greyed out (excluded by constraint), and two Temperature × Lot pairs are gaps (red ✗). The constraint cost at the bottom quantifies the damage: discrimination between H2 and H3 drops 40%.
+
+She compares this with Candidate 2 (Max Robustness — D-optimal backbone with replication of the weakest pair) and Candidate 3 (Max Coverage — classical orthogonal array filling the most gaps). Each carries the same structure: design matrix, pairwise coverage map, quality metrics, decision card, and constraint costs.
+
+She chooses Candidate 1 because her priority today is separating temperature drift from lot degradation — and this design achieves 100% discrimination for that pair.
 
 The researcher compares all three candidates and chooses based on their current priority — maximum hypothesis separation, statistical robustness, or broad exploration.
 
