@@ -589,7 +589,11 @@ A chemist investigating a yield drop in her reagent stability assay uploads a pr
 
 She clicks **Compile**. Tessellarium returns three candidates. Here is the first — optimized for maximum hypothesis discrimination:
 
-![Compilation Output — Candidate 1: Max Discrimination](docs/images/ui/compilation-output.png)
+<p align="center">
+  <img src="docs/images/ui/compilation-output.png" height="350" alt="Compilation Output — Candidate 1: Max Discrimination"/>
+  &nbsp;
+  <img src="docs/images/ui/optimization-output.png" height="350" alt="Optimization Output — Constraint cost analysis"/>
+</p>
 
 The pairwise coverage heatmap makes the trade-off visible: Lot C is greyed out (excluded by constraint), and two Temperature × Lot pairs are gaps (red ✗). The constraint cost at the bottom quantifies the damage: discrimination between H2 and H3 drops 40%.
 
