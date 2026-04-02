@@ -25,25 +25,29 @@ A researcher has competing hypotheses, partial data — protocols in PDF, result
 
 Today, the answer comes from intuition, conversations with colleagues, or a language model that generates plausible text without formal guarantees. None of these sources compute which experiment is optimal, what combinatorial coverage it achieves, which hypotheses it can and cannot discriminate, or what the researcher loses if a constraint prevents it from being executed.
 
-Existing scientific assistants — Google AI co-scientist, Microsoft Discovery, Sapio ELaiN, Labguru — interpret protocols, summarize literature, and suggest next steps as free text. None of them formulates the next experiment as an optimization problem with verifiable properties.
+Existing DOE software — JMP, Minitab, Design-Expert — computes designs correctly once the researcher has already identified the important factors, chosen a design family, and specified the domain. But that presupposes the researcher already knows *what* to optimize. When she arrives with competing hypotheses and partial data, no existing tool answers the prior question: which experiments would discriminate between her explanations?
 
-This affects experimental scientists and research leaders across chemistry, pharmaceuticals, agronomy, and materials science — anyone who faces critical decisions about what to test next with limited resources, competing explanations, and, increasingly, regulatory scrutiny demanding auditable justification for experimental choices.
+Conversely, AI-powered scientific assistants — Google AI co-scientist, Microsoft Discovery, Sapio ELaiN, Labguru — interpret protocols and suggest next steps as free text. None of them formulates the next experiment as an optimization problem with verifiable properties, and none transitions from hypothesis discrimination to formal response surface optimization.
 
 ---
 
 ## The goal
 
-Tessellarium treats the design of the next experiment as a **constrained combinatorial optimization problem**.
+Tessellarium treats experimental design as a **two-phase compiled workflow**.
 
-Given competing hypotheses, partial evidence, material and safety constraints, and a fixed run budget, it computes the minimal experimental matrix that maximizes hypothesis discrimination using established combinatorial design families: orthogonal arrays, covering arrays, Latin squares, BIBDs, and fractional factorials.
+**Phase 1 — Hypothesis Discrimination.** Given competing hypotheses, partial evidence, material and safety constraints, and a fixed run budget, it computes the minimal experimental matrix that maximizes hypothesis discrimination using covering arrays, orthogonal arrays, and fractional factorials. Its output is a concrete experimental artifact: the design matrix, the discrimination score per hypothesis pair, the pairwise coverage map, and the explicit cost of each constraint in terms of lost discrimination capability.
 
-Its output is not a conversational recommendation but a **concrete experimental artifact**: the design matrix, the combinatorial family selected with its justification, the verifiable statistical properties of the design (D-efficiency, GWLP, pairwise coverage), and the explicit cost of each constraint in terms of lost discrimination capability.
+**Phase 2 — Response Surface Optimization.** Once discrimination narrows the hypotheses, Tessellarium transitions to classical response surface methodology. It fits polynomial models (linear, interaction, quadratic) to accumulated response data, evaluates model quality (R², Q², ANOVA, lack of fit), generates Central Composite or Doehlert designs, and estimates the optimal operating conditions with confidence intervals and a contour map.
+
+This is the sequential workflow Fisher prescribed — screen first, optimize second — but with the hypothesis discrimination layer that was always missing.
 
 ---
 
 ## Theoretical foundation
 
-The system is grounded in Fisher's theory of experimental design, where experiments are not improvised but constructed with formal mathematical structure.
+The system is grounded in Fisher's theory of experimental design and in the classical DOE methodology formalized by Lundstedt et al. (1998). Experiments progress through two phases: **discrimination** (which explanation is correct?) and **optimization** (where is the best operating point?). Each phase uses different mathematical machinery.
+
+**Phase 1 — Discrimination Pipeline**
 
 The core engine follows a five-stage pipeline — **Generate → Filter → Score → Repair → Assess** — that separates mathematical design construction from hypothesis-specific optimization:
 
@@ -68,13 +72,38 @@ flowchart LR
 
 Design generation uses two specialized libraries — **OAPackage** for orthogonal array enumeration, D-optimal design synthesis, and statistical quality assessment; and **PyDOE2** for generalized subset designs and fractional factorials — with greedy set cover as the universal fallback. Discrimination scoring against hypothesis pairs is Tessellarium's unique contribution: no classical DOE library optimizes for this.
 
+**Phase 2 — Response Surface Optimization Pipeline**
+
+Once hypotheses are resolved, the system transitions to classical response surface methodology following the Lundstedt et al. workflow:
+
+```mermaid
+flowchart LR
+    FT["<b>① Fit</b><br/>Linear → interaction<br/>→ quadratic model"]
+    EV["<b>② Evaluate</b><br/>R², Q², ANOVA,<br/>lack of fit"]
+    RF["<b>③ Refine</b><br/>Remove insignificant<br/>terms one at a time"]
+    DS["<b>④ Design</b><br/>CCD or Doehlert<br/>for quadratic region"]
+    OP["<b>⑤ Optimize</b><br/>Predicted optimum<br/>+ confirmation run"]
+
+    FT --> EV --> RF --> DS --> OP
+
+    style FT fill:#0891b2,stroke:#0e7490,color:#ffffff
+    style EV fill:#7c3aed,stroke:#6d28d9,color:#ffffff
+    style RF fill:#d97706,stroke:#b45309,color:#ffffff
+    style DS fill:#059669,stroke:#047857,color:#ffffff
+    style OP fill:#dc2626,stroke:#b91c1c,color:#ffffff
+
+    linkStyle default stroke:#555,stroke-width:2px
+```
+
+The transition between phases is triggered when discrimination resolves the competing hypotheses. At that point, the system fits a polynomial response model to the accumulated data, evaluates model adequacy using the diagnostics Lundstedt et al. prescribe (R² ≥ 0.8, Q² ≥ 0.5 for chemical data, no significant lack of fit), and switches to CCD or Doehlert designs for quadratic optimization. Center points are included automatically for continuous factors to detect curvature.
+
 ---
 
 ## How it works
 
 ```mermaid
 flowchart TB
-    subgraph Phase1["<b>Phase 1 — Multimodal Ingestion</b>"]
+    subgraph S1["<b>1 — Multimodal Ingestion</b>"]
         PDF["📄 Protocol PDF"]
         CSV["📊 Results CSV"]
         IMG["🖼️ Assay Image"]
@@ -82,7 +111,7 @@ flowchart TB
         PDF --> CU
     end
 
-    subgraph Phase2["<b>Phase 2 — Problem Space Construction</b>"]
+    subgraph S2["<b>2 — Problem Space Construction</b>"]
         PA["<b>Parser Agent</b><br/>GPT-4o"]
         PS[("<b>Problem Space</b><br/>Factors · Hypotheses<br/>Evidence · Constraints<br/>Completed runs")]
         CU --> PA
@@ -91,7 +120,7 @@ flowchart TB
         PA --> PS
     end
 
-    subgraph Phase3["<b>Phase 3 — Safety Gate</b>"]
+    subgraph S3["<b>3 — Safety Gate</b>"]
         SG["<b>Safety Governor</b><br/>Deterministic rules<br/>+ Content Safety API"]
         PS --> SG
         SG -->|"ALLOW ✓"| DOE
@@ -99,7 +128,7 @@ flowchart TB
         SG -->|"BLOCK 🛑"| Block["Evidence summary<br/>+ mandatory human review"]
     end
 
-    subgraph Phase4["<b>Phase 4 — Deterministic Compilation</b>"]
+    subgraph S4["<b>4 — Deterministic Compilation</b>"]
         DOE["<b>DOE Planner</b><br/>Pure Python · Zero LLM"]
         OA["OAPackage"]
         PD["PyDOE2"]
@@ -110,7 +139,7 @@ flowchart TB
         OA & PD & GR --> C3["<b>Candidate 3</b><br/>Max Coverage"]
     end
 
-    subgraph Phase5["<b>Phase 5 — Critique & Explanation</b>"]
+    subgraph S5["<b>5 — Critique & Explanation</b>"]
         CR["<b>Critic Agent</b><br/>GPT-4o-mini"]
         EX["<b>Explainer Agent</b><br/>GPT-4o"]
         DC["<b>Decision Cards</b><br/>6-field structured<br/>explanation per candidate"]
@@ -118,19 +147,30 @@ flowchart TB
         EX -.-> SR["AI Search<br/>Grounding citations"]
     end
 
-    subgraph Phase6["<b>Phase 6 — Optional Verification</b>"]
+    subgraph S6["<b>6 — Optional Verification</b>"]
         LN["<b>Lean 4</b><br/>Formal proof of<br/>design properties"]
         C1 & C2 & C3 -.-> LN
     end
 
-    DC --> OUT["<b>Output:</b> 3 candidates + design matrices + decision cards<br/>+ coverage map + discrimination metrics + constraint costs"]
+    subgraph S7["<b>7 — Response Surface Optimization</b>"]
+        FIT["<b>Model Fitting</b><br/>Linear → Interaction<br/>→ Quadratic"]
+        EVAL["<b>Model Evaluation</b><br/>R², Q², ANOVA<br/>Lack of fit"]
+        RSMX["<b>RSM Design</b><br/>CCD / Doehlert"]
+        OPTX["<b>Predicted Optimum</b><br/>+ Confirmation run"]
+        FIT --> EVAL --> RSMX --> OPTX
+    end
 
-    style Phase1 fill:#263238,stroke:#546e7a,color:#eceff1
-    style Phase2 fill:#1a237e,stroke:#3949ab,color:#e8eaf6
-    style Phase3 fill:#e65100,stroke:#f57c00,color:#fff3e0
-    style Phase4 fill:#1b5e20,stroke:#388e3c,color:#e8f5e9
-    style Phase5 fill:#283593,stroke:#3f51b5,color:#e8eaf6
-    style Phase6 fill:#4a148c,stroke:#7b1fa2,color:#f3e5f5
+    DC --> OUT["<b>Output:</b> 3 candidates + design matrices + decision cards<br/>+ coverage map + discrimination metrics + constraint costs"]
+    OUT --> RUN["🔬 <b>Researcher</b><br/>Runs experiments<br/>Collects response data"]
+    RUN -->|"hypotheses resolved"| FIT
+
+    style S1 fill:#263238,stroke:#546e7a,color:#eceff1
+    style S2 fill:#1a237e,stroke:#3949ab,color:#e8eaf6
+    style S3 fill:#e65100,stroke:#f57c00,color:#fff3e0
+    style S4 fill:#1b5e20,stroke:#388e3c,color:#e8f5e9
+    style S5 fill:#283593,stroke:#3f51b5,color:#e8eaf6
+    style S6 fill:#4a148c,stroke:#7b1fa2,color:#f3e5f5
+    style S7 fill:#164e63,stroke:#0891b2,color:#ecfeff
 
     style PDF fill:#37474f,stroke:#78909c,color:#eceff1
     style CSV fill:#37474f,stroke:#78909c,color:#eceff1
@@ -158,7 +198,13 @@ flowchart TB
 
     style LN fill:#4a148c,stroke:#7b1fa2,color:#ffffff
 
+    style FIT fill:#0e7490,stroke:#0891b2,color:#ffffff
+    style EVAL fill:#6d28d9,stroke:#7c3aed,color:#ffffff
+    style RSMX fill:#047857,stroke:#059669,color:#ffffff
+    style OPTX fill:#b91c1c,stroke:#dc2626,color:#ffffff
+
     style OUT fill:#263238,stroke:#78909c,color:#ffffff
+    style RUN fill:#4e342e,stroke:#8d6e63,color:#ffffff
 
     linkStyle default stroke:#90a4ae,stroke-width:1.5px
 ```
@@ -181,25 +227,28 @@ A Critic Agent identifies weaknesses (confounding, coverage gaps, redundancy). A
 **6. Optional verification.**
 Design properties (pairwise coverage, Latin square bijectivity, BIBD balance) can be formally verified in Lean 4 via a dedicated verification service.
 
+**7. Response surface optimization (Phase 2).**
+When discrimination resolves the hypotheses, the researcher triggers Phase 2. The system fits polynomial models, evaluates quality against Lundstedt's criteria (R², Q², ANOVA, lack of fit), generates a CCD or Doehlert design, and presents the predicted optimum with a 3D response surface, contour plot, and coefficient chart in the optimization card. See the [Phase 2 pipeline](#theoretical-foundation) for the full five-stage flow.
+
 ---
 
 ## Key differentiators
 
-**Compiler, not assistant.** The experiment design engine is deterministic code that generates designs from known combinatorial families, scores them by discrimination power, and computes quality metrics (D-efficiency, GWLP). The LLM interprets inputs and explains outputs but never produces the experimental plan.
+**Compiler, not assistant.** The experiment design engine is deterministic code that generates designs from known combinatorial families, scores them by discrimination power, and computes quality metrics (D-efficiency, GWLP). In Phase 2, the compiler extends to polynomial model fitting, model evaluation (R², Q², ANOVA), and response surface optimization — all deterministic computation, no LLM. The LLM interprets inputs and explains outputs but never produces the experimental plan or the fitted model.
 
-**Mathematically grounded designs.** Candidates are generated from OAPackage (orthogonal arrays with proven strength-2 coverage, D-optimal designs via coordinate exchange) and PyDOE2 (fractional factorials, generalized subset designs), not from greedy heuristics alone. Every design carries its D-efficiency and generalized word-length pattern.
+**Two-phase sequential workflow.** Tessellarium implements the screen→optimize sequence that classical DOE prescribes, but with hypothesis discrimination as the screening engine. Phase 1 answers "which explanation is correct?" Phase 2 answers "where is the optimum?" The transition is explicit and auditable.
 
-**Safety as a compilation constraint.** Sensitive domains are excluded from the search space before the planner runs, not filtered after. The system shows what discrimination is lost per exclusion.
+**Mathematically grounded designs.** Candidates are generated from OAPackage (orthogonal arrays with proven strength-2 coverage, D-optimal designs via coordinate exchange) and PyDOE2 (fractional factorials, generalized subset designs, CCD), not from greedy heuristics alone. Every design carries its D-efficiency and generalized word-length pattern.
 
-**Three candidates per compilation.** Each cycle produces designs optimized for discrimination, robustness, and coverage, giving the researcher an informed choice aligned with their current priority.
+**Model quality gates.** Phase 2 evaluates every fitted model against Lundstedt's diagnostic criteria: explained variation (R²), predicted variation (Q²), ANOVA significance, and lack of fit. The system will not recommend an optimum from an inadequate model — it flags the gap and suggests additional runs or model terms.
 
-**Transparent constraint costs.** Every restriction is quantified: the researcher sees exactly what hypothesis pairs become indistinguishable and why.
+**Constraint-aware compilation.** Safety exclusions, material constraints, and budget limits are enforced *before* the planner runs — safety is a constraint on the input, not a filter on the output. Each compilation cycle produces three candidates (discrimination, robustness, coverage), and every restriction is quantified: the researcher sees exactly what hypothesis pairs become indistinguishable and why.
 
 ---
 
 ## Combinatorial design families
 
-Tessellarium selects from established design families based on the problem structure. Each family has different strengths. The intuition behind the most important ones:
+Tessellarium selects from established design families based on the problem structure and the experimental phase. Each family has different strengths. The intuition behind the most important ones:
 
 ### Orthogonal arrays
 
@@ -223,7 +272,7 @@ Check: Crust × Sauce? Thin-Red ✓, Thin-White ✓, Thick-Red ✓, Thick-White 
 
 **Analogy:** You're testing a web form with 5 fields, each with 3 options. A full test is 3⁵ = 243 configurations. A strength-2 covering array might need only 15 — every pair of fields still sees all 9 combinations. If a bug requires two specific settings to trigger, you'll find it.
 
-Unlike orthogonal arrays, covering arrays allow *imbalanced* replication — some combinations may appear more than once. This flexibility is what makes them work when constraints exclude certain combinations. Tessellarium uses covering arrays as the default when constraints invalidate pure orthogonal designs.
+Unlike orthogonal arrays, covering arrays allow *imbalanced* replication — some combinations may appear more than once. This flexibility is what makes them work when constraints exclude certain combinations. Tessellarium uses covering arrays as the default in Phase 1 when constraints invalidate pure orthogonal designs.
 
 ### Fractional factorials
 
@@ -277,15 +326,45 @@ Every pair of wines appears together in exactly 1 session. That's the *balance* 
 
 Tessellarium uses **OAPackage's coordinate-exchange algorithm** (`Doptimize`) to generate these. The optimization function is configurable: α=[1,2,0] prioritizes main-effect robustness (for MAX_ROBUSTNESS candidates); α=[1,0,0] targets pure D-efficiency (for MAX_COVERAGE candidates).
 
+### Central Composite Designs (CCD)
+
+**The idea:** augment a factorial design with axial (star) points and center points to fit a full quadratic model — enabling estimation of curvature and prediction of an optimum.
+
+**Structure:** A CCD for k factors consists of: (1) a 2ᵏ or fractional factorial (the cube points), (2) 2k axial points at distance ±α from the center along each axis, and (3) nᶜ center-point replicates.
+
+**Analogy:** You've already tested the corners of a square (factorial). The CCD adds points along the axes beyond the square (to measure curvature) and points at the center (to estimate pure error and detect nonlinearity). With 2 factors, that's 4 corners + 4 star points + 3 center points = 11 runs for a full quadratic model.
+
+Tessellarium generates CCDs in Phase 2 for fitting full quadratic models. Center-point deviation or significant lack of fit in the linear model signals when a quadratic design is needed.
+
+### Doehlert designs
+
+**The idea:** place experimental points on a uniform shell (hexagonal pattern in 2D) around a suspected optimum, allowing efficient estimation of a quadratic response surface with fewer runs than a CCD.
+
+**Structure:** For 2 factors, a Doehlert design has 7 points: 1 center + 6 forming a regular hexagon. For 3 factors, 13 points form a cuboctahedron. The key advantage: neighboring domains can be explored by adding only a few new runs — the existing hexagon shares edges with adjacent hexagons.
+
+**Analogy:** Imagine placing sensors on a honeycomb grid to map temperature across a surface. Each hexagonal cell shares its boundary with the next, so extending your map to a new region reuses the sensors already on the shared edge. You cover more territory per sensor than with a square grid.
+
+Tessellarium uses Doehlert designs in Phase 2 as an alternative to CCD when the experimenter wants maximum efficiency per run or plans to explore adjacent regions sequentially.
+
+### Mixture designs
+
+**The idea:** when experimental factors are proportions of a formulation that must sum to a constant (100%), ordinary factorial designs produce invalid combinations. Mixture designs respect the constant-sum constraint.
+
+**Analogy:** You're developing a concrete mix with cement, sand, and water. You can't independently set cement=80%, sand=80%, water=80% — they must sum to 100%. The experimental region is a triangle (simplex), not a cube. A mixture design places runs on and inside this triangle.
+
+**Key distinction:** Mixture factors are coupled by the constant-sum constraint and cannot vary independently. Tessellarium detects mixture factors from the ProblemSpace, applies pseudo-component transformations when the feasible region is a sub-simplex, and uses D-optimal designs for irregular constrained regions, following Lundstedt et al.'s recommendation.
+
 ---
 
 ## Applied examples
 
 ### Pharmaceutical process optimization
 
-In pharmaceutical development, Design of Experiments (DoE) is a standard methodology for reaction optimization under Quality by Design (QbD) frameworks. A typical esterification process with six factors (temperature, acid equivalents, reaction time, solvent, catalyst loading, water content) requires a sequential workflow — scoping, screening, RSM optimization, robustness — consuming 30–40 experiments across weeks.
+In pharmaceutical development, Design of Experiments (DoE) is a standard methodology for reaction optimization under Quality by Design (QbD) frameworks. A typical process with multiple factors requires a sequential workflow — scoping, screening, RSM optimization, robustness — consuming 30–40 experiments across weeks.
 
-Tessellarium compresses this workflow: given competing hypotheses about the root cause of yield drops ("insufficient acid" vs "time too short" vs "acid×time interaction"), it compiles a single covering array of 12 runs that discriminates between all three hypotheses while respecting material and regulatory constraints (e.g., ICH solvent restrictions). When a reagent becomes unavailable mid-study, the system recalculates and quantifies the discrimination lost.
+Tessellarium compresses this workflow. Consider a reagent stability assay where yields are dropping. The researcher has 3 factors (Temperature, Reagent Lot, Incubation Time), 3 competing hypotheses about the root cause, 4 completed runs, and a budget of 4 more runs. When a reagent (Lot C) becomes unavailable mid-study, the system recalculates and quantifies the discrimination lost.
+
+**Phase 1 — Discrimination**
 
 ```mermaid
 sequenceDiagram
@@ -294,18 +373,36 @@ sequenceDiagram
     participant DOE as DOE Planner
 
     R->>T: Upload protocol PDF + results CSV
-    T->>T: Parse → 6 factors, 3 hypotheses, 10 completed runs
-    T->>DOE: Compile (budget = 12 runs)
-    DOE->>DOE: Generate OA(12, 6, mixed) via OAPackage
+    T->>T: Parse → 3 factors, 3 hypotheses, 4 completed runs
+    T->>DOE: Compile (budget = 4 runs)
+    DOE->>DOE: Generate covering array via OAPackage
     DOE->>DOE: Score by discrimination: H1 vs H2 vs H3
     DOE-->>T: 3 candidates + D-efficiency + GWLP
     T-->>R: Decision cards with trade-offs
 
     R->>T: "Lot C is exhausted"
     T->>DOE: Re-compile with constraint
-    DOE->>DOE: Filter → 2 rows removed → Repair coverage
-    DOE-->>T: New plan + "H1 vs H3 discrimination drops 14%"
+    DOE->>DOE: Filter → repair coverage
+    DOE-->>T: New plan + "H2 vs H3 discrimination drops 40%"
     T-->>R: Updated candidates + constraint cost
+```
+
+**Phase 2 — Response Surface Optimization**
+
+```mermaid
+sequenceDiagram
+    participant R as Researcher
+    participant T as Tessellarium
+    participant RSM as RSM Engine
+
+    Note over R,RSM: Phase 1 confirmed H2 (Lot C degraded)
+
+    R->>T: "H2 confirmed. Optimize yield over Temperature × Time"
+    T->>RSM: Generate CCD (11 runs) + fit quadratic model
+    RSM->>RSM: ŷ = 90.2 + 3.6·T + 1.2·t − 4.0·T² − 2.5·t² + 1.5·T·t
+    RSM->>RSM: R² = 0.94, Q² = 0.81, Lack of fit: PASS
+    RSM-->>T: Predicted optimum: 35.2°C, 1.70h → 91.4% yield
+    T-->>R: Response surface card + contour plot + confirmation recommendation
 ```
 
 ### Agronomic field trials
@@ -317,13 +414,13 @@ Tessellarium constructs the design, applies constraint exclusions, and reports: 
 ---
 
 ## Architecture
- 
+
 The system separates three types of reasoning following the same neurosymbolic principle recently validated for mathematical discovery in combinatorial design theory *(Xia et al., 2026)*:
- 
+
 > The LLM interprets and explains.
 > Deterministic code computes and optimizes.
 > The researcher directs and decides.
- 
+
 ![Tessellarium Architecture](docs/images/architecture/tessellarium-architecture.png)
 
 ### Azure services
@@ -346,10 +443,11 @@ The system separates three types of reasoning following the same neurosymbolic p
 | Library | Role |
 |---|---|
 | **OAPackage** | Orthogonal array enumeration, D-optimal design synthesis, quality metrics (D-efficiency, GWLP, rank) |
-| **PyDOE2** | Generalized subset designs (mixed-level fractional factorials), 2-level fractional factorials, full factorials |
-| **Greedy set cover** | Hypothesis-discrimination-optimized selection — Tessellarium's unique contribution |
+| **PyDOE2** | Generalized subset designs (mixed-level fractional factorials), 2-level fractional factorials, full factorials, CCD and Doehlert design generation |
+| **NumPy / SciPy** | Polynomial model fitting (least squares), ANOVA (F-tests), cross-validation (Q²/PRESS), optimum estimation (constrained minimization) |
+| **Greedy set cover** | Greedy selection with hypothesis-discrimination scoring — the scoring function is Tessellarium's unique contribution |
 
-The result is an auditable experimental artifact with traceable justification at every step, from ingestion to compilation to verification.
+The result is an auditable experimental artifact with traceable justification at every step, from ingestion to compilation to verification to optimization.
 
 ---
 
@@ -399,6 +497,8 @@ python -m pytest tests/ -v
 # Or run individual test files:
 python tests/test_doe_planner.py          # Core DOE compilation + constraints
 python tests/test_design_generators.py    # Classical design generation (OAPackage + PyDOE2)
+python tests/test_rsm_fitter.py           # Polynomial fitting + model diagnostics
+python tests/test_ccd_generator.py        # CCD construction + center points
 python tests/test_safety_governor.py      # Safety checks (ALLOW / DEGRADE / BLOCK)
 python tests/test_critic_agent.py         # Offline critique logic
 python tests/test_explainer_agent.py      # Decision card generation
@@ -466,10 +566,17 @@ tessellarium/
 │   │   └── settings.py                 # Azure configuration (pydantic-settings)
 │   ├── app/
 │   │   ├── models/
-│   │   │   └── problem_space.py        # Central data schema (ProblemSpace, all types)
+│   │   │   ├── problem_space.py        # Central data schema (ProblemSpace, all types)
+│   │   │   ├── response_model.py       # FittedModel, CoefficientEstimate, ModelQuality
+│   │   │   └── experimental_phase.py   # ExperimentalPhase enum (DISCRIMINATION, OPTIMIZATION)
 │   │   ├── doe_planner/
 │   │   │   ├── planner.py              # Deterministic compiler (5-stage pipeline)
 │   │   │   └── design_generators.py    # OAPackage + PyDOE2 generator hierarchy
+│   │   ├── rsm/
+│   │   │   ├── model_fitter.py         # Polynomial fitting (linear → quadratic)
+│   │   │   ├── model_evaluator.py      # R², Q², ANOVA, lack of fit
+│   │   │   ├── optimizer.py            # Predicted optimum + confidence region
+│   │   │   └── ccd_generator.py        # CCD and Doehlert design construction
 │   │   ├── safety/
 │   │   │   └── governor.py             # Deterministic policy engine
 │   │   ├── agents/
@@ -485,6 +592,8 @@ tessellarium/
 │   └── tests/
 │       ├── test_doe_planner.py          # Core integration test
 │       ├── test_design_generators.py    # Classical design generation
+│       ├── test_rsm_fitter.py           # Polynomial fitting + diagnostics
+│       ├── test_ccd_generator.py        # CCD construction + center points
 │       ├── test_safety_governor.py      # Safety checks
 │       ├── test_critic_agent.py         # Critic offline logic
 │       ├── test_explainer_agent.py      # Explainer offline logic
@@ -505,10 +614,14 @@ tessellarium/
 │       ├── api/client.ts               # Axios API client
 │       ├── types/index.ts              # TypeScript interfaces
 │       ├── components/
-│       │   ├── CandidateCard.tsx        # Design candidate display
+│       │   ├── CandidateCard.tsx        # Phase 1 design candidate display
 │       │   ├── DesignMatrixTable.tsx    # Matrix visualization
 │       │   ├── DecisionCardView.tsx     # 6-field decision card
 │       │   ├── VerificationBadge.tsx    # Lean verification status
+│       │   ├── ResponseSurfaceCard.tsx  # Phase 2 card (model eq, R²/Q², contour, optimum)
+│       │   ├── ContourPlot.tsx          # 2D contour visualization
+│       │   ├── SurfacePlot3D.tsx        # 3D response surface (Three.js or Plotly)
+│       │   ├── CoefficientChart.tsx     # Horizontal bar chart with CI whiskers
 │       │   └── ErrorBoundary.tsx        # React error boundary
 │       └── pages/
 │           ├── Home.tsx
@@ -570,6 +683,9 @@ tessellarium/
 | `POST` | `/api/problem-space/{id}` | Load ProblemSpace directly (testing) |
 | `POST` | `/api/compile` | Safety → DOE Planner → 3 candidates |
 | `POST` | `/api/constrain/{id}` | Add constraint → recalculate → show cost |
+| `POST` | `/api/fit/{id}` | Fit polynomial model to completed runs → R², Q², coefficients |
+| `POST` | `/api/optimize/{id}` | Generate RSM design (CCD/Doehlert) → predicted optimum |
+| `GET` | `/api/surface/{id}` | Response surface data for 3D/contour visualization |
 | `GET` | `/api/coverage/{id}` | Coverage map for visualization |
 | `GET` | `/api/session/{id}` | Full ProblemSpace |
 | `GET` | `/api/sessions` | List session summaries |
@@ -577,7 +693,9 @@ tessellarium/
 
 ---
 
-## The compilation output (What the researcher sees)
+## The compilation output
+
+### Phase 1 — Hypothesis Discrimination
 
 A chemist investigating a yield drop in her reagent stability assay uploads a protocol PDF and a CSV of results. Tessellarium parses the inputs and identifies:
 
@@ -590,29 +708,66 @@ A chemist investigating a yield drop in her reagent stability assay uploads a pr
 She clicks **Compile**. Tessellarium returns three candidates. Here is the first — optimized for maximum hypothesis discrimination:
 
 <p align="center">
-  <img src="docs/images/ui/compilation-output.png" height="750" alt="Compilation Output — Candidate 1: Max Discrimination"/>
-  &nbsp;
-  <img src="docs/images/ui/optimization-output.png" height="750" alt="Optimization Output — Constraint cost analysis"/>
+  <img src="docs/images/ui/compilation-output.png" width="480" alt="Phase 1 — Discrimination Card"/>
 </p>
 
-The pairwise coverage heatmap makes the trade-off visible: Lot C is greyed out (excluded by constraint), and two Temperature × Lot pairs are gaps (red ✗). The constraint cost at the bottom quantifies the damage: discrimination between H2 and H3 drops 40%.
+The card tells her exactly what she'll learn and what she won't. Temperature drift vs reagent degradation: fully distinguishable — the 4 runs contain every combination needed. Temperature drift vs insufficient time: only 50% distinguishable — the gaps at 20°C/2h and 30°C/1h are the missing pieces. The pairwise coverage heatmap makes this visible: green = covered, red = gap, grey = excluded by constraint. The constraint cost at the bottom: discrimination between H2 and H3 drops 40% because Lot C is gone.
 
-She compares this with Candidate 2 (Max Robustness — D-optimal backbone with replication of the weakest pair) and Candidate 3 (Max Coverage — classical orthogonal array filling the most gaps). Each carries the same structure: design matrix, pairwise coverage map, quality metrics, decision card, and constraint costs.
+She compares this with Candidate 2 (Max Robustness — D-optimal backbone with replication of the weakest pair) and Candidate 3 (Max Coverage — classical orthogonal array filling the most gaps), then chooses based on her current priority.
 
-She chooses Candidate 1 because her priority today is separating temperature drift from lot degradation — and this design achieves 100% discrimination for that pair.
+She runs the 4 experiments. Results confirm H2 — Lot C was degraded. H1 is ruled out.
 
-The researcher compares all three candidates and chooses based on their current priority — maximum hypothesis separation, statistical robustness, or broad exploration.
+### Phase 2 — Response Surface Optimization
+
+With H2 confirmed, her question changes: given that Lot C is bad, what Temperature and Incubation Time maximize yield using Lots A and B?
+
+Tessellarium transitions to Phase 2 and generates a Central Composite Design: 4 factorial corners, 4 axial points, 3 center replicates — 11 runs. After she completes them:
+
+<p align="center">
+  <img src="docs/images/ui/optimization-output.png" width="480" alt="Phase 2 — Response Surface Optimization Card"/>
+</p>
+
+The card shows a fitted quadratic model with color-coded coefficients on coded variables (magnitudes directly comparable). R² = 0.94 (the model explains 94% of variation), Q² = 0.81 (cross-validated prediction generalizes well), lack of fit: PASS. The 3D response surface and contour plot show the dome peaking at 35.2°C, 1.70h. The coefficient chart shows Temperature and T² curvature as the dominant significant effects. Predicted optimum: 91.4% yield with a 95% confidence interval.
+
+The decision card recommends a single confirmation run at the predicted optimum. If the measured yield matches the prediction, the model is validated and she transitions to production monitoring. If it deviates significantly, the model needs additional terms or a smaller domain.
+
+Phase 1 told her which explanation was correct. Phase 2 told her where the optimum lies. The full Fisher sequence — with the hypothesis stage that was always missing.
 
 ---
 
 ## Current limitations
 
-- **Code Interpreter** for CSV analysis is planned but not yet implemented (CSV is currently read as raw text)
-- **GPT-4o vision** for image interpretation is planned but not yet implemented
-- **MOLS algebraic construction** is not implemented — the planner uses orthogonal arrays and covering arrays from OAPackage
-- **BIBD verification** in Lean 4 is a placeholder — covering array and Latin square verification are fully implemented
-- **Semantic Citation Layer** (literature knowledge base) is on the roadmap; current grounding uses the researcher's own uploaded data
-- **Foundry Agent Service** integration is optional — the system falls back to direct Azure OpenAI calls when Foundry is not configured
+### Implemented — Phase 1 (Discrimination)
+
+- Covering array and orthogonal array generation via OAPackage
+- Greedy hypothesis-discrimination-optimized design selection
+- Pairwise coverage maps and constraint cost quantification
+- Lean 4 formal verification (covering arrays, Latin squares)
+- Safety Governor with ALLOW / DEGRADE / BLOCK
+- Multimodal ingestion (PDF via Content Understanding)
+
+### Implemented — Phase 2 (Optimization)
+
+- Polynomial model fitting (linear, interaction, quadratic)
+- Model evaluation: R², Q² (PRESS cross-validation), ANOVA, lack of fit
+- Model refinement (one term at a time, monitoring Q² improvement)
+- CCD and Doehlert design generation with center points
+- Predicted optimum with confidence intervals
+- Response surface visualization (3D surface, 2D contour, coefficient chart)
+
+### Roadmap
+
+- **Principled design family construction** — the Phase 1 planner currently uses greedy selection with post-hoc family labeling; algebraic construction with explicit generators and resolution for fractional factorials is planned
+- **Automatic phase transition** — the switch from Phase 1 to Phase 2 is currently researcher-triggered; automatic transition based on model evaluation (e.g., linear model has significant lack of fit → suggest CCD) is planned
+- **Mixture designs** — constant-sum constraints, pseudo-component transformations, D-optimal mixture designs
+- **Effect-based hypothesis updating** — using fitted coefficient magnitudes to automatically update epistemic states (speculative → supported / challenged) when |bᵢ| exceeds significance thresholds
+- **Normal probability plots** of effects for saturated screening designs
+- **Code Interpreter** for CSV analysis (currently read as raw text)
+- **GPT-4o vision** for image interpretation
+- **MOLS algebraic construction** — planner uses OA/CA from OAPackage as substitute
+- **BIBD verification** in Lean 4 (placeholder; covering array and Latin square verification are implemented)
+- **Semantic Citation Layer** literature knowledge base (current grounding uses the researcher's own uploaded data)
+- **Foundry Agent Service** integration (optional; falls back to direct Azure OpenAI calls)
 
 ---
 
@@ -622,11 +777,13 @@ The researcher compares all three candidates and chooses based on their current 
 
 - Fisher, R.A. (1935). *The Design of Experiments*. Oliver & Boyd.
 - Box, G.E.P., Hunter, J.S., & Hunter, W.G. (2005). *Statistics for Experimenters: Design, Innovation, and Discovery*. Wiley.
+- Lundstedt, T., Seifert, E., Abramo, L., Thelin, B., Nyström, Å., Pettersen, J., & Bergman, R. (1998). *Experimental design and optimization*. Chemometrics and Intelligent Laboratory Systems, 42, 3–40.
 
 ### Combinatorial design
 
 - Colbourn, C.J. & Dinitz, J.H. (2007). *Handbook of Combinatorial Designs*. CRC Press.
 - Hedayat, A.S., Sloane, N.J.A., & Stufken, J. (1999). *Orthogonal Arrays: Theory and Applications*. Springer.
+- Doehlert, D.H. (1970). *Uniform Shell Designs*. Journal of the Royal Statistical Society Series C, 19(3), 231–239.
 
 ### Neurosymbolic collaboration
 
@@ -663,7 +820,7 @@ Tessellarium was developed as part of the Microsoft Innovation Challenge.
 
 Built on Microsoft Azure services: Foundry Agent Service, Azure OpenAI, Azure Content Understanding, Azure AI Content Safety, Azure AI Search, Cosmos DB, Container Apps, Static Web Apps, and Front Door.
 
-The theoretical foundation draws from R.A. Fisher's Design of Experiments tradition and from the combinatorial design theory community. The neurosymbolic architecture is informed by recent work on agentic collaboration for mathematical discovery (Xia et al., 2026). Design generation leverages OAPackage (Eendebak & Vazquez, 2019) and PyDOE2.
+The theoretical foundation draws from R.A. Fisher's Design of Experiments tradition, from the classical DOE methodology of Lundstedt et al. (1998), and from the combinatorial design theory community. The neurosymbolic architecture is informed by recent work on agentic collaboration for mathematical discovery (Xia et al., 2026). Design generation leverages OAPackage (Eendebak & Vazquez, 2019) and PyDOE2. Response surface methodology follows the sequential workflow prescribed by Lundstedt et al.
 
 Special thanks to the open-source communities behind Lean 4, Mathlib, OAPackage, PyDOE2, and the MCP ecosystem.
 
