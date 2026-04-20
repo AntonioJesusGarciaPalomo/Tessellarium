@@ -31,6 +31,7 @@ from app.models.problem_space import (
     CoverageCell, CandidateStrategy, DesignFamily, ExperimentalRun,
     ConstraintCost, AffectedPair,
 )
+from app.doe_planner.utils import combo_key
 
 
 logger = logging.getLogger(__name__)
@@ -918,5 +919,5 @@ class DOEPlanner:
 
     @staticmethod
     def _combo_key(combo: dict[str, str]) -> str:
-        """Deterministic string key for a combination."""
-        return "|".join(f"{k}={v}" for k, v in sorted(combo.items()))
+        """Deterministic string key for a combination. Delegates to utils.combo_key."""
+        return combo_key(combo)

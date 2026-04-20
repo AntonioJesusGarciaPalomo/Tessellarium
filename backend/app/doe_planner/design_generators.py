@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.models.problem_space import ProblemSpace, DesignFamily
+from app.doe_planner.utils import combo_key
 
 logger = logging.getLogger(__name__)
 
@@ -482,8 +483,6 @@ def filter_by_constraints(
     rows: list[dict[str, str]], ps: ProblemSpace,
 ) -> FilterResult:
     """Remove rows containing excluded factor-levels."""
-    from app.doe_planner.planner import DOEPlanner
-
     excluded: dict[str, str] = {}
     for constraint in ps.constraints:
         if constraint.excluded_factor_id and constraint.excluded_level_id:
@@ -491,18 +490,18 @@ def filter_by_constraints(
             lid = constraint.excluded_level_id
             for row in rows:
                 if row.get(fid) == lid:
-                    excluded[DOEPlanner._combo_key(row)] = constraint.description
+                    excluded[combo_key(row)] = constraint.description
         elif constraint.excluded_factor_id and not constraint.excluded_level_id:
             factor = ps.get_factor_by_id(constraint.excluded_factor_id)
             if factor:
                 for level in factor.levels:
                     for row in rows:
                         if row.get(constraint.excluded_factor_id) == level.id:
-                            excluded[DOEPlanner._combo_key(row)] = constraint.description
+                            excluded[combo_key(row)] = constraint.description
         for combo in constraint.excluded_combinations:
-            excluded[DOEPlanner._combo_key(combo)] = constraint.description
+            excluded[combo_key(combo)] = constraint.description
 
-    surviving = [r for r in rows if DOEPlanner._combo_key(r) not in excluded]
+    surviving = [r for r in rows if combo_key(r) not in excluded]
     cov_before = compute_pairwise_coverage(rows, ps)
     cov_after = compute_pairwise_coverage(surviving, ps)
 
@@ -522,8 +521,6 @@ def repair_coverage(
     ps: ProblemSpace,
 ) -> list[dict[str, str]]:
     """Greedily add rows from untested_pool to restore pairwise coverage."""
-    from app.doe_planner.planner import DOEPlanner
-
     factors = ps.factors
     covered = set()
     for row in current_rows:
@@ -543,7 +540,7 @@ def repair_coverage(
     if not uncovered:
         return current_rows
 
-    selected_keys = {DOEPlanner._combo_key(r) for r in current_rows}
+    selected_keys = {combo_key(r) for r in current_rows}
     result = list(current_rows)
 
     for _ in range(budget_remaining):
@@ -552,7 +549,7 @@ def repair_coverage(
         best_combo = None
         best_count = 0
         for combo in untested_pool:
-            key = DOEPlanner._combo_key(combo)
+            key = combo_key(combo)
             if key in selected_keys:
                 continue
             count = sum(
@@ -567,7 +564,7 @@ def repair_coverage(
         if best_combo is None or best_count == 0:
             break
         result.append(best_combo)
-        selected_keys.add(DOEPlanner._combo_key(best_combo))
+        selected_keys.add(combo_key(best_combo))
         for i, f1 in enumerate(factors):
             for f2 in factors[i + 1:]:
                 if f1.id in best_combo and f2.id in best_combo:

@@ -460,12 +460,16 @@ class SearchService:
     async def _upload_documents(self, docs: list[dict]) -> None:
         """Upload documents to the search index."""
         if self._vectors_enabled:
-            for doc in docs:
-                content = doc.get("content", "")
-                if content:
-                    embedding = await self.generate_embedding(content)
-                    if embedding:
-                        doc["content_vector"] = embedding
+            async def _embed(content: str) -> list[float] | None:
+                return await self.generate_embedding(content) if content else None
+
+            embeddings = await asyncio.gather(
+                *[_embed(doc.get("content", "")) for doc in docs],
+                return_exceptions=True,
+            )
+            for doc, embedding in zip(docs, embeddings):
+                if isinstance(embedding, list):
+                    doc["content_vector"] = embedding
 
         try:
             await asyncio.to_thread(self._search_client.upload_documents, docs)

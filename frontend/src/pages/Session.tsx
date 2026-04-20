@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { getSession, compile, addConstraint } from '../api/client'
 import type { ProblemSpace, CompileResponse, Constraint, Factor } from '../types'
 import CandidateCard from '../components/CandidateCard'
+import CoverageMap from '../components/CoverageMap'
 
 export default function Session() {
   const { id } = useParams<{ id: string }>()
@@ -99,9 +100,8 @@ export default function Session() {
                 {f.levels.map(l => (
                   <span
                     key={l.id}
-                    className={`text-xs px-2 py-0.5 rounded ${
-                      l.available ? 'bg-gray-100' : 'bg-red-100 text-red-600 line-through'
-                    }`}
+                    className={`text-xs px-2 py-0.5 rounded ${l.available ? 'bg-gray-100' : 'bg-red-100 text-red-600 line-through'
+                      }`}
                   >
                     {l.name}
                   </span>
@@ -118,11 +118,10 @@ export default function Session() {
             <div key={h.id} className="mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono text-gray-400">{h.id}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                  h.epistemic_state === 'supported' ? 'bg-green-100 text-green-700' :
+                <span className={`text-xs px-1.5 py-0.5 rounded ${h.epistemic_state === 'supported' ? 'bg-green-100 text-green-700' :
                   h.epistemic_state === 'challenged' ? 'bg-red-100 text-red-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>
+                    'bg-gray-100 text-gray-600'
+                  }`}>
                   {h.epistemic_state}
                 </span>
               </div>
@@ -153,9 +152,8 @@ export default function Session() {
           ) : (
             ps.constraints.map((c, i) => (
               <div key={c.id || i} className="mb-1 text-sm">
-                <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${
-                  c.is_safety_constraint ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                }`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${c.is_safety_constraint ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
                   {c.constraint_type}
                 </span>
                 {c.description}
@@ -167,9 +165,8 @@ export default function Session() {
 
       {/* Safety */}
       {safetyVerdict && safetyVerdict !== 'allow' && (
-        <div className={`border rounded-lg p-4 ${
-          safetyVerdict === 'block' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'
-        }`}>
+        <div className={`border rounded-lg p-4 ${safetyVerdict === 'block' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'
+          }`}>
           <h2 className="text-sm font-semibold mb-1">
             Safety: {safetyVerdict.toUpperCase()}
           </h2>
@@ -277,6 +274,16 @@ export default function Session() {
       </div>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      {/* Coverage Map */}
+      {ps.coverage_map.length > 0 && (
+        <CoverageMap
+          cells={ps.coverage_map}
+          factors={ps.factors}
+          totalCombinations={ps.total_combinations}
+          testedCombinations={ps.tested_combinations}
+        />
+      )}
 
       {/* Candidates */}
       {candidates.length > 0 && (

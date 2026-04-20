@@ -1,6 +1,8 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
-  "python.testing.pytestArgs": ["backend/tests"],
+  "python.testing.pytestArgs": [
+    "backend/tests"
+  ],
   "python.testing.pytestEnabled": true,
   "editor.formatOnSave": true,
   "[python]": {
@@ -16,5 +18,6 @@
     "**/__pycache__": true,
     "**/.pytest_cache": true,
     "**/node_modules": true
-  }
+  },
+  "kiroAgent.configureMCP": "Disabled"
 }
